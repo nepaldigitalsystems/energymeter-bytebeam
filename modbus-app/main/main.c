@@ -19,25 +19,47 @@
 *  
 *******************************************************************************/
 
-#include "string.h"
+#include <stdio.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+
 #include "esp_log.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "nvs_flash.h"
+#include "esp_netif.h"
+#include "nvs.h"
+#include "esp_ota_ops.h"
+#include "esp_http_client.h"
+#include "esp_https_ota.h"
+#include "esp_tls.h"
+#include "esp_sntp.h"
+#include "esp_log.h"
+#include "mqtt_client.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include "freertos/semphr.h"
+#include "freertos/queue.h"
+
 #include "modbus_params.h"  // for modbus parameters structures
 #include "mbcontroller.h"
 #include "sdkconfig.h"
 
-#include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_log.h"
-#include "nvs_flash.h"
-
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "lwip/sockets.h"
+#include "lwip/dns.h"
+#include "lwip/netdb.h"
 
+#include "cJSON.h"
+
+// #include "protocol_examples_common.h"
+
+#include "bytebeam_sdk.h"
 
 #define EXAMPLE_ESP_WIFI_SSID      "nepaldigisys"
 #define EXAMPLE_ESP_WIFI_PASS      "NDS_0ffice"
@@ -47,6 +69,8 @@
 #define MB_DEV_SPEED            9600  // The communication speed of the UART
 #define CONFIG_MB_UART_RXD      22
 #define CONFIG_MB_UART_TXD      23
+// #define CONFIG_MB_UART_RXD      16
+// #define CONFIG_MB_UART_TXD      17
 #define CONFIG_MB_UART_RTS      18
 
 #define CONFIG_MB_COMM_MODE_RTU 1
@@ -83,7 +107,19 @@
 // Options can be used as bit masks or parameter limits
 #define OPTS(min_val, max_val, step_val) { .opt1 = min_val, .opt2 = max_val, .opt3 = step_val }
 
-static const char *TAG = "MASTER_TEST";
+// this macro is used to specify the delay for 1 sec.
+#define APP_DELAY_ONE_SEC 1000u
+
+static int config_publish_period = APP_DELAY_ONE_SEC;
+
+static float temperature = 25.0;
+static float humidity = 85.0;
+
+static char energymeter_stream[] = "energymeter_stream";
+
+static bytebeam_client_t bytebeam_client;
+
+static const char *TAG = "ENERGYMETER-BYTEBEAM";
 
 static int s_retry_num = 0;
 
@@ -104,6 +140,16 @@ enum {
     CID_COUNT
 };
 
+typedef struct param_energymeter {
+    float volatage;
+    float current;
+    float total_kwh;
+    float frequencey;   
+} param_energymeter_t;
+
+param_energymeter_t energyvals;
+
+ bool flag_new_modbus_data_available = false;
 // Example Data (Object) Dictionary for Modbus parameters:
 // The CID field in the table must be unique.
 // Modbus Slave Addr field defines slave address of the device with correspond parameter.
@@ -163,7 +209,7 @@ static void* master_get_param_data(const mb_parameter_descriptor_t* param_descri
 }
 
 // User operation function to read slave values and check alarm
-static void master_operation_func(void *arg)
+static void modbus_master_operation(void *arg)
 {
     esp_err_t err = ESP_OK;
     float value = 0;
@@ -172,7 +218,7 @@ static void master_operation_func(void *arg)
 
     ESP_LOGI(TAG, "Start modbus test...");
 
-    for(uint16_t retry = 0; (!alarm_state); retry++) {
+    for(;;) {
         // Read all found characteristics from slave(s)
         for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
         {
@@ -202,6 +248,23 @@ static void master_operation_func(void *arg)
                             //         alarm_state = true;
                             //         break;
                             // }
+                            switch (param_descriptor->cid) {
+                            case CID_MFM384_INP_DATA_V1N:
+                                energyvals.volatage = value;
+                                break;
+                            case CID_MFM384_INP_DATA_I1:
+                                energyvals.current = value;
+                                break;
+                            case CID_MFM384_INP_DATA_FREQUENCY:
+                                energyvals.frequencey = value;
+                                break;
+                            case CID_MFM384_INP_DATA_KWH1:
+                                energyvals.total_kwh = value;
+                                break;                                                                                            
+                            default:
+                                break;
+                            flag_new_modbus_data_available = true;
+                            }
                         } else {
                             uint16_t state = *(uint16_t*)temp_data_ptr;
                             const char* rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
@@ -293,6 +356,7 @@ static esp_err_t master_init(void)
     return err;
 }
 
+#if 1
 static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
@@ -317,6 +381,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 
 void wifi_init_sta(void)
 {
+    #if 1
     s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
@@ -326,6 +391,7 @@ void wifi_init_sta(void)
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    #endif 
 
     esp_event_handler_instance_t instance_any_id;
     esp_event_handler_instance_t instance_got_ip;
@@ -339,7 +405,7 @@ void wifi_init_sta(void)
                                                         &event_handler,
                                                         NULL,
                                                         &instance_got_ip));
-
+    
     wifi_config_t wifi_config = {
         .sta = {
             .ssid = EXAMPLE_ESP_WIFI_SSID,
@@ -382,9 +448,218 @@ void wifi_init_sta(void)
     vEventGroupDelete(s_wifi_event_group);
 }
 
+#endif 
+
+static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
+{
+    struct timeval te;
+    long long milliseconds = 0;
+    static uint64_t sequence = 0;
+
+    cJSON *device_shadow_json_list = NULL;
+    cJSON *device_shadow_json = NULL;
+    cJSON *sequence_json = NULL;
+    cJSON *timestamp_json = NULL;
+    cJSON *device_status_json = NULL;
+    cJSON *voltage_v1_json = NULL;
+    cJSON *current_i1_json = NULL;
+    cJSON *totalkwh_json = NULL;
+    cJSON *frequency_json = NULL;
+
+    char *string_json = NULL;
+
+    device_shadow_json_list = cJSON_CreateArray();
+
+    if (device_shadow_json_list == NULL)
+    {
+        ESP_LOGE(TAG, "Json Init failed.");
+        return -1;
+    }
+
+    device_shadow_json = cJSON_CreateObject();
+
+    if (device_shadow_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+
+    // get current time
+    gettimeofday(&te, NULL);
+    milliseconds = te.tv_sec * 1000LL + te.tv_usec / 1000;
+
+    timestamp_json = cJSON_CreateNumber(milliseconds);
+
+    if (timestamp_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add time stamp failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+
+    cJSON_AddItemToObject(device_shadow_json, "timestamp", timestamp_json);
+
+    sequence++;
+    sequence_json = cJSON_CreateNumber(sequence);
+
+    if (sequence_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add sequence id failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+
+    cJSON_AddItemToObject(device_shadow_json, "sequence", sequence_json);
+
+   
+    // Add voltage
+    voltage_v1_json = cJSON_CreateNumber(energyvals.volatage);
+
+    if (voltage_v1_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add voltage failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }    
+    cJSON_AddItemToObject(device_shadow_json, "voltage", voltage_v1_json);
+
+
+    // Add Current
+    current_i1_json = cJSON_CreateNumber(energyvals.current);
+
+    if (current_i1_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add Current failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }    
+    cJSON_AddItemToObject(device_shadow_json, "current", current_i1_json);
+
+
+    // Add total KWh
+    totalkwh_json = cJSON_CreateNumber(energyvals.total_kwh);
+
+    if (totalkwh_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add voltage failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+    
+    cJSON_AddItemToObject(device_shadow_json, "totalkwh", totalkwh_json);        
+
+
+    // Add frequency
+    frequency_json = cJSON_CreateNumber(energyvals.frequencey);
+
+    if (frequency_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add humidity failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+    
+    cJSON_AddItemToObject(device_shadow_json, "frequency", frequency_json);
+
+
+    cJSON_AddItemToArray(device_shadow_json_list, device_shadow_json);
+
+    string_json = cJSON_Print(device_shadow_json_list);
+
+    if(string_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json string print failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+
+    ESP_LOGI(TAG, "\nStatus to send:\n%s\n", string_json);
+
+    // int ret_val = 0;
+    // if(flag_new_modbus_data_available) {
+        // flag_new_modbus_data_available = false;
+        // publish the json to sht stream
+        int ret_val = bytebeam_publish_to_stream(bytebeam_client, energymeter_stream, string_json);
+    // } else {
+    //     ESP_LOGE(TAG, "Could not get new modbus reading");
+    // }
+
+    cJSON_Delete(device_shadow_json_list);
+    cJSON_free(string_json);
+
+    return ret_val;
+}
+
+static void app_start(bytebeam_client_t *bytebeam_client)
+{
+    int ret_val = 0;
+
+    while (1)
+    {   
+        // publish sht values
+        ret_val = publish_energymeter_values(bytebeam_client);
+
+        if (ret_val != 0)
+        {
+            ESP_LOGE(TAG, "Failed to publish energymeter values.");
+        }
+
+        vTaskDelay(config_publish_period / portTICK_PERIOD_MS);
+    }
+}
+
+static void time_sync_notification_cb(struct timeval *tv)
+{
+    ESP_LOGI(TAG, "Notification of a time synchronization event");
+}
+
+static void initialize_sntp(void)
+{
+    ESP_LOGI(TAG, "Initializing SNTP");
+
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+
+#ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
+    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+#endif
+
+    sntp_init();
+}
+
+static void sync_time_from_ntp(void)
+{
+    time_t now = 0;
+    struct tm timeinfo = {0};
+    int retry = 0;
+    const int retry_count = 10;
+
+    initialize_sntp();
+
+    // wait for time to be set
+    while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count)
+    {
+        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+    }
+
+    time(&now);
+    localtime_r(&now, &timeinfo);
+}
+
 void app_main(void)
 {
     // Initialization of device peripheral and objects
+    ESP_LOGI(TAG, "[APP] Startup..");
+    ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
+
+    esp_log_level_set("*", ESP_LOG_INFO);
+    esp_log_level_set("MQTT_CLIENT", ESP_LOG_VERBOSE);
+    esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
+    esp_log_level_set("TRANSPORT", ESP_LOG_VERBOSE);
+    esp_log_level_set("OUTBOX", ESP_LOG_VERBOSE);
 
         //Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -394,12 +669,29 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
+    // ESP_ERROR_CHECK(esp_event_loop_create_default());    
+
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
-    vTaskDelay(10);
+    vTaskDelay(1000);   
 
     ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
 
-    master_operation_func(NULL);
+    // sync time from the ntp
+    sync_time_from_ntp();
+    
+    // initialize the bytebeam client
+    bytebeam_init(&bytebeam_client);
+    
+    xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+
+    // start the bytebeam client
+    bytebeam_start(&bytebeam_client);
+
+    //
+    // start the main application
+    //
+    app_start(&bytebeam_client);
+
 }
