@@ -1,16 +1,23 @@
-// Copyright 2016-2019 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*******************************************************************************
+* (C) Copyright 2018-2023; Nepal Digital Systems Pvt Ltd, Kathmandu, Nepal.
+* The attached material and the information contained therein is proprietary
+* to Nepal Digital Systems Pvt Ltd and is issued only under strict confidentiality
+* arrangements.It shall not be used, reproduced, copied in whole or in part,
+* adapted,modified, or disseminated without a written license of Nepal Digital  
+* Systems Pvt Ltd.It must be returned to Nepal Digital Systems Pvt Ltd upon 
+* its first request.
+*
+*  File Name           : main.c
+*
+*  Description         : Main application file modbus, WiFi Connection and ByteBeam integration
+*
+*  Change history      : 
+*
+*     Author        Date          Ver                 Description
+*  ------------    --------       ---   --------------------------------------
+*  Lomas Subedi  30 March 2023    1.0               Initial Creation
+*  
+*******************************************************************************/
 
 #include "string.h"
 #include "esp_log.h"
@@ -36,11 +43,13 @@
 #define EXAMPLE_ESP_WIFI_PASS      "NDS_0ffice"
 #define EXAMPLE_ESP_MAXIMUM_RETRY  10
 
-#define MB_PORT_NUM     2   // Number of UART port used for Modbus connection
-#define MB_DEV_SPEED    115200  // The communication speed of the UART
-#define CONFIG_MB_UART_RXD 22
-#define CONFIG_MB_UART_TXD 23
-#define CONFIG_MB_UART_RTS 18
+#define MB_PORT_NUM             2   // Number of UART port used for Modbus connection
+#define MB_DEV_SPEED            9600  // The communication speed of the UART
+#define CONFIG_MB_UART_RXD      22
+#define CONFIG_MB_UART_TXD      23
+#define CONFIG_MB_UART_RTS      18
+
+#define CONFIG_MB_COMM_MODE_RTU 1
 
 // Note: Some pins on target chip cannot be assigned for UART communication.
 // See UART documentation for selected board and target to configure pins using Kconfig.
@@ -56,7 +65,7 @@
 #define UPDATE_CIDS_TIMEOUT_TICS        (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS                 (1)
+#define POLL_TIMEOUT_MS                 (100)
 #define POLL_TIMEOUT_TICS               (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 
@@ -83,20 +92,15 @@ static EventGroupHandle_t s_wifi_event_group;
 
 // Enumeration of modbus device addresses accessed by master device
 enum {
-    MB_DEVICE_ADDR1 = 1 // Only one slave device used for the test (add other slave addresses here)
+    MB_DEVICE_ADDR1 = 2 // Only one slave device used for the test (add other slave addresses here)
 };
 
 // Enumeration of all supported CIDs for device (used in parameter definition table)
 enum {
-    CID_INP_DATA_0 = 0,
-    CID_HOLD_DATA_0,
-    CID_INP_DATA_1,
-    CID_HOLD_DATA_1,
-    CID_INP_DATA_2,
-    CID_HOLD_DATA_2,
-    CID_HOLD_TEST_REG,
-    CID_RELAY_P1,
-    CID_RELAY_P2,
+    CID_MFM384_INP_DATA_V1N = 0,
+    CID_MFM384_INP_DATA_I1,
+    CID_MFM384_INP_DATA_FREQUENCY,   
+    CID_MFM384_INP_DATA_KWH1, 
     CID_COUNT
 };
 
@@ -111,24 +115,17 @@ enum {
 // Access Mode - can be used to implement custom options for processing of characteristic (Read/Write restrictions, factory mode values and etc).
 const mb_parameter_descriptor_t device_parameters[] = {
     // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size, Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
-    { CID_INP_DATA_0, STR("Data_channel_0"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
-                    INPUT_OFFSET(input_data0), PARAM_TYPE_FLOAT, 4, OPTS( -10, 10, 1 ), PAR_PERMS_READ_WRITE_TRIGGER },
-    { CID_HOLD_DATA_0, STR("Humidity_1"), STR("%rH"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 0, 2,
-            HOLD_OFFSET(holding_data0), PARAM_TYPE_FLOAT, 4, OPTS( 0, 100, 1 ), PAR_PERMS_READ_WRITE_TRIGGER },
-    { CID_INP_DATA_1, STR("Temperature_1"), STR("C"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 2, 2,
-            INPUT_OFFSET(input_data1), PARAM_TYPE_FLOAT, 4, OPTS( -40, 100, 1 ), PAR_PERMS_READ_WRITE_TRIGGER },
-    { CID_HOLD_DATA_1, STR("Humidity_2"), STR("%rH"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 2, 2,
-            HOLD_OFFSET(holding_data1), PARAM_TYPE_FLOAT, 4, OPTS( 0, 100, 1 ), PAR_PERMS_READ_WRITE_TRIGGER },
-    { CID_INP_DATA_2, STR("Temperature_2"), STR("C"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 4, 2,
-            INPUT_OFFSET(input_data2), PARAM_TYPE_FLOAT, 4, OPTS( -40, 100, 1 ), PAR_PERMS_READ_WRITE_TRIGGER },
-    { CID_HOLD_DATA_2, STR("Humidity_3"), STR("%rH"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 4, 2,
-            HOLD_OFFSET(holding_data2), PARAM_TYPE_FLOAT, 4, OPTS( 0, 100, 1 ), PAR_PERMS_READ_WRITE_TRIGGER },
-    { CID_HOLD_TEST_REG, STR("Test_regs"), STR("__"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 10, 58,
-            HOLD_OFFSET(test_regs), PARAM_TYPE_ASCII, 116, OPTS( 0, 100, 1 ), PAR_PERMS_READ_WRITE_TRIGGER },
-    { CID_RELAY_P1, STR("RelayP1"), STR("on/off"), MB_DEVICE_ADDR1, MB_PARAM_COIL, 0, 8,
-            COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS( BIT1, 0, 0 ), PAR_PERMS_READ_WRITE_TRIGGER },
-    { CID_RELAY_P2, STR("RelayP2"), STR("on/off"), MB_DEVICE_ADDR1, MB_PARAM_COIL, 8, 8,
-            COIL_OFFSET(coils_port1), PARAM_TYPE_U16, 2, OPTS( BIT0, 0, 0 ), PAR_PERMS_READ_WRITE_TRIGGER }
+    { CID_MFM384_INP_DATA_V1N, STR("Voltage V1N"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
+                    INPUT_OFFSET(input_data_v1n), PARAM_TYPE_FLOAT, 4, OPTS( 0, 1000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER },
+
+    { CID_MFM384_INP_DATA_I1, STR("Current I1"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 16, 2,
+                    INPUT_OFFSET(input_data_current_i1), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER },
+
+    { CID_MFM384_INP_DATA_FREQUENCY, STR("Frequency"), STR("Hz"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 56, 2,
+                    INPUT_OFFSET(input_data_Frequency), PARAM_TYPE_FLOAT, 4, OPTS(0, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER },                     
+
+    { CID_MFM384_INP_DATA_KWH1, STR("Units"), STR("KWh"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 58, 2,
+                    INPUT_OFFSET(input_data_kwh1), PARAM_TYPE_FLOAT, 4, OPTS(0, 10000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER },                                                           
 };
 
 // Calculate number of parameters in the table
@@ -143,16 +140,16 @@ static void* master_get_param_data(const mb_parameter_descriptor_t* param_descri
        switch(param_descriptor->mb_param_type)
        {
            case MB_PARAM_HOLDING:
-               instance_ptr = ((void*)&holding_reg_params + param_descriptor->param_offset - 1);
+            //    instance_ptr = ((void*)&holding_reg_params + param_descriptor->param_offset - 1);
                break;
            case MB_PARAM_INPUT:
                instance_ptr = ((void*)&input_reg_params + param_descriptor->param_offset - 1);
                break;
            case MB_PARAM_COIL:
-               instance_ptr = ((void*)&coil_reg_params + param_descriptor->param_offset - 1);
+            //    instance_ptr = ((void*)&coil_reg_params + param_descriptor->param_offset - 1);
                break;
            case MB_PARAM_DISCRETE:
-               instance_ptr = ((void*)&discrete_reg_params + param_descriptor->param_offset - 1);
+            //    instance_ptr = ((void*)&discrete_reg_params + param_descriptor->param_offset - 1);
                break;
            default:
                instance_ptr = NULL;
@@ -187,45 +184,7 @@ static void master_operation_func(void *arg)
                 void* temp_data_ptr = master_get_param_data(param_descriptor);
                 assert(temp_data_ptr);
                 uint8_t type = 0;
-                if ((param_descriptor->param_type == PARAM_TYPE_ASCII) &&
-                        (param_descriptor->cid == CID_HOLD_TEST_REG)) {
-                   // Check for long array of registers of type PARAM_TYPE_ASCII
-                    err = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key,
-                                                                            (uint8_t*)temp_data_ptr, &type);
-                    if (err == ESP_OK) {
-                        ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = (0x%08x) read successful.",
-                                                 param_descriptor->cid,
-                                                 (char*)param_descriptor->param_key,
-                                                 (char*)param_descriptor->param_units,
-                                                 *(uint32_t*)temp_data_ptr);
-                        // Initialize data of test array and write to slave
-                        if (*(uint32_t*)temp_data_ptr != 0xAAAAAAAA) {
-                            memset((void*)temp_data_ptr, 0xAA, param_descriptor->param_size);
-                            *(uint32_t*)temp_data_ptr = 0xAAAAAAAA;
-                            err = mbc_master_set_parameter(cid, (char*)param_descriptor->param_key,
-                                                              (uint8_t*)temp_data_ptr, &type);
-                            if (err == ESP_OK) {
-                                ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = (0x%08x), write successful.",
-                                                            param_descriptor->cid,
-                                                            (char*)param_descriptor->param_key,
-                                                            (char*)param_descriptor->param_units,
-                                                            *(uint32_t*)temp_data_ptr);
-                            } else {
-                                ESP_LOGE(TAG, "Characteristic #%d (%s) write fail, err = 0x%x (%s).",
-                                                        param_descriptor->cid,
-                                                        (char*)param_descriptor->param_key,
-                                                        (int)err,
-                                                        (char*)esp_err_to_name(err));
-                            }
-                        }
-                    } else {
-                        ESP_LOGE(TAG, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
-                                                param_descriptor->cid,
-                                                (char*)param_descriptor->param_key,
-                                                (int)err,
-                                                (char*)esp_err_to_name(err));
-                    }
-                } else {
+                {
                     err = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key,
                                                         (uint8_t*)&value, &type);
                     if (err == ESP_OK) {

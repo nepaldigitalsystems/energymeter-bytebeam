@@ -35,15 +35,13 @@ typedef struct
 #pragma pack(push, 1)
 typedef struct
 {
-    float input_data0; // 0
-    float input_data1; // 2
-    float input_data2; // 4
-    float input_data3; // 6
-    uint16_t data[150]; // 8 + 150 = 158
-    float input_data4; // 158
-    float input_data5;
-    float input_data6;
-    float input_data7;
+    float input_data_v1n;
+    uint16_t data_off_1[16];        // 0 + 15 = 16    
+    float input_data_current_i1;    // 16
+    uint16_t data_off_2[40];        // 16 + 40 = 56    
+    float input_data_Frequency;     // 56
+    uint16_t data_off_3[28];        // 56 + 28 = 84    
+    float input_data_kwh1;          // 84
 } input_reg_params_t;
 #pragma pack(pop)
 
