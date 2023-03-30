@@ -36,11 +36,11 @@ typedef struct
 typedef struct
 {
     float input_data_v1n;
-    uint16_t data_off_1[16];        // 0 + 15 = 16    
+    // uint16_t data_off_1[16];        // 0 + 15 = 16    
     float input_data_current_i1;    // 16
-    uint16_t data_off_2[40];        // 16 + 40 = 56    
+    // uint16_t data_off_2[40];        // 16 + 40 = 56    
     float input_data_Frequency;     // 56
-    uint16_t data_off_3[28];        // 56 + 28 = 84    
+    // uint16_t data_off_3[28];        // 56 + 28 = 84    
     float input_data_kwh1;          // 84
 } input_reg_params_t;
 #pragma pack(pop)

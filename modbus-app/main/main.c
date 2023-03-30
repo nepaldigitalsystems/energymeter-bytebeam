@@ -65,7 +65,7 @@
 #define UPDATE_CIDS_TIMEOUT_TICS        (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS                 (100)
+#define POLL_TIMEOUT_MS                 (500)
 #define POLL_TIMEOUT_TICS               (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 
@@ -116,7 +116,7 @@ enum {
 const mb_parameter_descriptor_t device_parameters[] = {
     // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size, Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
     { CID_MFM384_INP_DATA_V1N, STR("Voltage V1N"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
-                    INPUT_OFFSET(input_data_v1n), PARAM_TYPE_FLOAT, 4, OPTS( 0, 1000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER },
+                    INPUT_OFFSET(input_data_v1n), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER },
 
     { CID_MFM384_INP_DATA_I1, STR("Current I1"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 16, 2,
                     INPUT_OFFSET(input_data_current_i1), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER },
@@ -172,7 +172,7 @@ static void master_operation_func(void *arg)
 
     ESP_LOGI(TAG, "Start modbus test...");
 
-    for(uint16_t retry = 0; retry <= MASTER_MAX_RETRY && (!alarm_state); retry++) {
+    for(uint16_t retry = 0; (!alarm_state); retry++) {
         // Read all found characteristics from slave(s)
         for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
         {
@@ -197,11 +197,11 @@ static void master_operation_func(void *arg)
                                             (char*)param_descriptor->param_units,
                                             value,
                                             *(uint32_t*)temp_data_ptr);
-                            if (((value > param_descriptor->param_opts.max) ||
-                                (value < param_descriptor->param_opts.min))) {
-                                    alarm_state = true;
-                                    break;
-                            }
+                            // if (((value > param_descriptor->param_opts.max) ||
+                            //     (value < param_descriptor->param_opts.min))) {
+                            //         alarm_state = true;
+                            //         break;
+                            // }
                         } else {
                             uint16_t state = *(uint16_t*)temp_data_ptr;
                             const char* rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
