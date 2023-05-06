@@ -12,4 +12,4 @@ idf_component_register(SRCS "main.c"
                                         "esp_wifi"
                                         "driver"
                                         "json"
-                        REQUIRES modbus_common freemodbus nvs_flash)
+                        REQUIRES modbus_common freemodbus nvs_flash wifi_provisioning)
