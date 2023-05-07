@@ -81,7 +81,7 @@ static EventGroupHandle_t wifi_event_group;
 
 #elif CONFIG_IDF_TARGET_ESP32S3
 
-#define CONFIG_MB_UART_RXD      16
+#define CONFIG_MB_UART_RXD      18
 #define CONFIG_MB_UART_TXD      17
 #define CONFIG_MB_UART_RTS      40
 
@@ -109,7 +109,7 @@ static EventGroupHandle_t wifi_event_group;
 #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (500)
+#define POLL_TIMEOUT_MS (1)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 #define WIFI_CONNECTED_BIT BIT0
@@ -1152,9 +1152,12 @@ void app_main(void)
     /* Wait for Wi-Fi connection */
     xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_EVENT, false, true, portMAX_DELAY);    
 
-    // ESP_ERROR_CHECK(master_init());
+    ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
 
+    xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+
+    #if 0
     // sync time from the ntp
     sync_time_from_ntp();
 
@@ -1170,4 +1173,5 @@ void app_main(void)
     // start the main application
     //
     app_start(&bytebeam_client);
+    #endif
 }
