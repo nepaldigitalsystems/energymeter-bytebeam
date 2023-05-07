@@ -8,6 +8,8 @@
 #include "esp_log.h"
 #include "esp_spiffs.h"
 
+// #define CONFIG_JSON_DEV_TEST
+
 // Device Provisioning Success Code
 #define BYTEBEAM_PROVISIONING_SUCCESS 0
 
@@ -69,7 +71,11 @@ static char *utils_read_file(char *filename)
 static int read_device_config_file(void)
 {
     esp_err_t ret_code = ESP_OK;
+    #ifdef CONFIG_JSON_DEV_TEST
+    char *config_fname = "/spiffs/device_config_2.json";
+    #else
     char *config_fname = "/spiffs/device_config.json";
+    #endif
 
     esp_vfs_spiffs_conf_t conf = {
         .base_path = "/spiffs",
