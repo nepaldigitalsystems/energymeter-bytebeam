@@ -60,8 +60,6 @@
 
 #include "cJSON.h"
 
-// #include "protocol_examples_common.h"
-
 #include "bytebeam_sdk.h"
 
 
@@ -73,17 +71,27 @@
 const int WIFI_CONNECTED_EVENT = BIT0;
 static EventGroupHandle_t wifi_event_group;
 
-// #define EXAMPLE_ESP_WIFI_SSID "nepaldigisys"
-// #define EXAMPLE_ESP_WIFI_PASS "NDS_0ffice"
 #define CONFIG_EXAMPLE_PROV_MGR_MAX_RETRY_CNT 10
+
+#if CONFIG_IDF_TARGET_ESP32
+
+#define CONFIG_MB_UART_RXD 22 
+#define CONFIG_MB_UART_TXD 23
+#define CONFIG_MB_UART_RTS 18 // esp32->18
+
+#elif CONFIG_IDF_TARGET_ESP32S3
+
+#define CONFIG_MB_UART_RXD      16
+#define CONFIG_MB_UART_TXD      17
+#define CONFIG_MB_UART_RTS      40
+
+#elif CONFIG_IDF_TARGET_ESP32C3
+    
+#endif
 
 #define MB_PORT_NUM 2         // Number of UART port used for Modbus connection
 #define MB_DEV_SPEED 9600     // The communication speed of the UART
-#define CONFIG_MB_UART_RXD 22 // esp32->22
-#define CONFIG_MB_UART_TXD 23 // esp32->23
-// #define CONFIG_MB_UART_RXD      16
-// #define CONFIG_MB_UART_TXD      17
-#define CONFIG_MB_UART_RTS 18 // esp32->18
+
 
 #define CONFIG_MB_COMM_MODE_RTU 1
 
@@ -129,7 +137,8 @@ static int config_publish_period = APP_DELAY_ONE_SEC;
 // static float temperature = 25.0;
 // static float humidity = 85.0;
 
-static char energymeter_stream[] = "energymeter_stream";
+// static char energymeter_stream[] = "energymeter_stream";
+static char energymeter_stream[] = "nds_test_stream";
 
 static bytebeam_client_t bytebeam_client;
 
@@ -143,7 +152,7 @@ static EventGroupHandle_t s_wifi_event_group;
 // Enumeration of modbus device addresses accessed by master device
 enum
 {
-    MB_DEVICE_ADDR1 = 1 // Only one slave device used for the test (add other slave addresses here)
+    MB_DEVICE_ADDR1 = 2 // Only one slave device used for the test (add other slave addresses here)
 };
 
 // Enumeration of all supported CIDs for device (used in parameter definition table)
@@ -155,11 +164,11 @@ enum
     // CID_MFM384_INP_DATA_I1,
     // CID_MFM384_INP_DATA_I2,
     // CID_MFM384_INP_DATA_I3,
-    CID_MFM384_INP_DATA_AVG_I,
-    CID_MFM384_INP_DATA_FREQUENCY,
-    CID_MFM384_INP_DATA_KW,
-    CID_MFM384_INP_DATA_KWH,
-    CID_MFM384_INP_DATA_PF_AVG, 
+    // CID_MFM384_INP_DATA_AVG_I,
+    // CID_MFM384_INP_DATA_FREQUENCY,
+    // CID_MFM384_INP_DATA_KW,
+    // CID_MFM384_INP_DATA_KWH,
+    // CID_MFM384_INP_DATA_PF_AVG, 
     CID_COUNT
 };
 
@@ -168,14 +177,14 @@ typedef struct param_energymeter
     float voltage_1;
     float voltage_2;
     float voltage_3;
-    float current_avg;
+    // float current_avg;
     // float current_1;
     // float current_2;
     // float current_3;
-    float total_kw;
-    float total_kwh;
-    float frequencey;
-    float avg_pf;
+    // float total_kw;
+    // float total_kwh;
+    // float frequencey;
+    // float avg_pf;
 } param_energymeter_t;
 
 param_energymeter_t energyvals;
@@ -210,20 +219,20 @@ const mb_parameter_descriptor_t device_parameters[] = {
     // {CID_MFM384_INP_DATA_I3, STR("Current I3"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 20, 2,
     //  INPUT_OFFSET(current_3), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},   
 
-    {CID_MFM384_INP_DATA_AVG_I, STR("Current avg"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 22, 2,
-     INPUT_OFFSET(current_avg), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},   
+    // {CID_MFM384_INP_DATA_AVG_I, STR("Current avg"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 22, 2,
+    //  INPUT_OFFSET(current_avg), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},   
 
-    {CID_MFM384_INP_DATA_FREQUENCY, STR("Frequency"), STR("Hz"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 56, 2,
-     INPUT_OFFSET(frequencey), PARAM_TYPE_FLOAT, 4, OPTS(0, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    // {CID_MFM384_INP_DATA_FREQUENCY, STR("Frequency"), STR("Hz"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 56, 2,
+    //  INPUT_OFFSET(frequencey), PARAM_TYPE_FLOAT, 4, OPTS(0, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
 
-    {CID_MFM384_INP_DATA_KWH, STR("Units"), STR("KWh"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 58, 2,
-     INPUT_OFFSET(total_kwh), PARAM_TYPE_FLOAT, 4, OPTS(0, 10000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    // {CID_MFM384_INP_DATA_KWH, STR("Units"), STR("KWh"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 58, 2,
+    //  INPUT_OFFSET(total_kwh), PARAM_TYPE_FLOAT, 4, OPTS(0, 10000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
     
-    {CID_MFM384_INP_DATA_KW, STR("KW"), STR("KW"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 42, 2,
-     INPUT_OFFSET(total_kw), PARAM_TYPE_FLOAT, 4, OPTS(0, 10000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    // {CID_MFM384_INP_DATA_KW, STR("KW"), STR("KW"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 42, 2,
+    //  INPUT_OFFSET(total_kw), PARAM_TYPE_FLOAT, 4, OPTS(0, 10000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
 
-    {CID_MFM384_INP_DATA_PF_AVG, STR("pf"), STR("none"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 54, 2,
-     INPUT_OFFSET(avg_pf), PARAM_TYPE_FLOAT, 4, OPTS(0, 1, 0.001), PAR_PERMS_READ_WRITE_TRIGGER}
+    // {CID_MFM384_INP_DATA_PF_AVG, STR("pf"), STR("none"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 54, 2,
+    //  INPUT_OFFSET(avg_pf), PARAM_TYPE_FLOAT, 4, OPTS(0, 1, 0.001), PAR_PERMS_READ_WRITE_TRIGGER}
      
 };
 
@@ -413,9 +422,9 @@ static void modbus_master_operation(void *arg)
                             case CID_MFM384_INP_DATA_V_3:
                                 energyvals.voltage_3 = value;
                                 break;                                                                
-                            case CID_MFM384_INP_DATA_AVG_I:
-                                energyvals.current_avg = value;
-                                break;                                
+                            // case CID_MFM384_INP_DATA_AVG_I:
+                            //     energyvals.current_avg = value;
+                            //     break;                                
                             // case CID_MFM384_INP_DATA_I1:
                             //     energyvals.current_1 = value;
                             //     break;
@@ -425,18 +434,18 @@ static void modbus_master_operation(void *arg)
                             // case CID_MFM384_INP_DATA_I3:
                             //     energyvals.current_3 = value;
                             //     break;                                                                
-                            case CID_MFM384_INP_DATA_KW:
-                                energyvals.total_kw = value;
-                                break;
-                            case CID_MFM384_INP_DATA_KWH:
-                                energyvals.total_kwh = value;
-                                break;                            
-                            case CID_MFM384_INP_DATA_FREQUENCY:
-                                energyvals.frequencey = value;
-                                break;
-                            case CID_MFM384_INP_DATA_PF_AVG:
-                                energyvals.avg_pf = value;
-                                break;                                
+                            // case CID_MFM384_INP_DATA_KW:
+                            //     energyvals.total_kw = value;
+                            //     break;
+                            // case CID_MFM384_INP_DATA_KWH:
+                            //     energyvals.total_kwh = value;
+                            //     break;                            
+                            // case CID_MFM384_INP_DATA_FREQUENCY:
+                            //     energyvals.frequencey = value;
+                            //     break;
+                            // case CID_MFM384_INP_DATA_PF_AVG:
+                            //     energyvals.avg_pf = value;
+                            //     break;                                
                             default:
                                 break;
                                 flag_new_modbus_data_available = true;
@@ -684,11 +693,11 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     // cJSON *current_1_json = NULL;
     // cJSON *current_2_json = NULL;
     // cJSON *current_3_json = NULL;
-    cJSON *current_avg_json  = NULL;
-    cJSON *totalkw_json = NULL;
-    cJSON *totalkwh_json = NULL;
-    cJSON *frequency_json = NULL;
-    cJSON *avg_pf_json = NULL;    
+    // cJSON *current_avg_json  = NULL;
+    // cJSON *totalkw_json = NULL;
+    // cJSON *totalkwh_json = NULL;
+    // cJSON *frequency_json = NULL;
+    // cJSON *avg_pf_json = NULL;    
 
     char *string_json = NULL;
 
@@ -760,7 +769,7 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     // cJSON_AddItemToObject(device_shadow_json, "voltage", voltage_2_json);
 
     // Add Voltage 1
-    voltage_1_json = cJSON_CreateNumber(energyvals.voltage_1);
+    voltage_1_json = cJSON_CreateNumber(200);
     if (voltage_1_json == NULL)
     {
         ESP_LOGE(TAG, "Json add voltage 1 failed.");
@@ -789,6 +798,7 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     }
     cJSON_AddItemToObject(device_shadow_json, "voltage_3", voltage_3_json);
 
+    #if 0    
     // Add Avg I
     current_avg_json = cJSON_CreateNumber(energyvals.voltage_3);
     if (current_avg_json == NULL)
@@ -799,7 +809,6 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     }
     cJSON_AddItemToObject(device_shadow_json, "avg_current", current_avg_json);
 
-#if 0
     // Add Current 1
     current_1_json = cJSON_CreateNumber(energyvals.current_1);
     if (current_1_json == NULL)
@@ -842,7 +851,7 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     // }
     // cJSON_AddItemToObject(device_shadow_json, "current", current_i1_json);
 
-
+    #if 0
     // Add total KW
     totalkw_json = cJSON_CreateNumber(energyvals.total_kw);
 
@@ -889,6 +898,8 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
         return -1;
     }
     cJSON_AddItemToObject(device_shadow_json, "avg_pf", avg_pf_json);
+
+    #endif
     
     cJSON_AddItemToArray(device_shadow_json_list, device_shadow_json);
 
@@ -1141,8 +1152,7 @@ void app_main(void)
     /* Wait for Wi-Fi connection */
     xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_EVENT, false, true, portMAX_DELAY);    
 
-    ESP_ERROR_CHECK(master_init());
-    // master_init();
+    // ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
 
     // sync time from the ntp
@@ -1151,7 +1161,7 @@ void app_main(void)
     // initialize the bytebeam client
     bytebeam_init(&bytebeam_client);
 
-    xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+    // xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
 
     // start the bytebeam client
     bytebeam_start(&bytebeam_client);

@@ -21,14 +21,17 @@
 /*This macro is used to specify the maximum length of bytebeam project id string*/
 #define BYTEBEAM_PROJECT_ID_STR_LEN 100
 
+/*This macro is used to specify the maximum length of bytebeam mqtt topic string*/
+#define BYTEBEAM_MQTT_TOPIC_STR_LEN 200
+
 /*This macro is used to specify the maximum length of bytebeam action id string*/
 #define BYTEBEAM_ACTION_ID_STR_LEN 20
 
 /*This macro is used to specify the maximum length of bytebeam OTA url string*/
 #define BYTEBAM_OTA_URL_STR_LEN 200
 
-/*This macro is used to specify the maximum length of bytebeam mqtt topic string*/
-#define BYTEBEAM_MQTT_TOPIC_STR_LEN 200
+/*This macro is used to specify the maximum length of the bytebeam OTA error string*/
+#define BYTEBEAM_OTA_ERROR_STR_LEN 200
 
 /*This macro is used to specify the maximum number of actions that need to be handled for particular device*/
 #define BYTEBEAM_NUMBER_OF_ACTIONS 10
@@ -119,6 +122,14 @@ typedef struct {
     int (*func)(struct bytebeam_client *bytebeam_client, char *args, char *action_id);
 } bytebeam_action_functions_map_t;
 
+typedef struct bytebeam_device_info {
+    const char *status;
+    const char *software_type;
+    const char *software_version;
+    const char *hardware_type;
+    const char *hardware_version;
+} bytebeam_device_info_t;
+
 /**
  * @struct bytebeam_client_t
  * This struct contains all the configuration for instance of MQTT client
@@ -134,6 +145,7 @@ typedef struct {
  * Connection status of MQTT client instance.
  */
 typedef struct bytebeam_client {
+    bytebeam_device_info_t device_info;
     bytebeam_device_config_t device_cfg;
     bytebeam_client_handle_t client;
     bytebeam_client_config_t mqtt_cfg;
@@ -207,6 +219,21 @@ bytebeam_err_t bytebeam_publish_action_failed(bytebeam_client_t *bytebeam_client
  *      BB_FAILURE : Message publish failed
  */
 bytebeam_err_t bytebeam_publish_action_progress(bytebeam_client_t *bytebeam_client, char *action_id, int progress_percentage);
+
+/**
+ * @brief Publish message indicating action status of action being executed.
+ *
+ * @param[in] bytebeam_client     bytebeam client handle
+ * @param[in] action_id           action id for particular action
+ * @param[in] percentage          action execution progress in percentage
+ * @param[in] status              action state of the execution
+ * @param[in] error_message       error message if action failed
+ *
+ * @return
+ *      BB_SUCCESS : Message publish successful
+ *      BB_FAILURE : Message publish failed
+ */
+bytebeam_err_t bytebeam_publish_action_status(bytebeam_client_t* client, char *action_id, int percentage, char *status, char *error_message);
 
 /**
  * @brief Publish message to particualar stream

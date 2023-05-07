@@ -46,14 +46,14 @@ typedef struct
     float volatage_1;
     float volatage_2;
     float volatage_3;
-    float current_avg;
+    // float current_avg;
     // float current_1;
     // float current_2;
     // float current_3;
-    float total_kw;
-    float total_kwh;
-    float frequencey;
-    float avg_pf;
+    // float total_kw;
+    // float total_kwh;
+    // float frequencey;
+    // float avg_pf;
 
 } input_reg_params_t;
 
