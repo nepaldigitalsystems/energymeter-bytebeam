@@ -75,9 +75,9 @@ static EventGroupHandle_t wifi_event_group;
 
 #if CONFIG_IDF_TARGET_ESP32
 
-#define CONFIG_MB_UART_RXD 22 
-#define CONFIG_MB_UART_TXD 23
-#define CONFIG_MB_UART_RTS 18 // esp32->18
+#define CONFIG_MB_UART_RXD      22 
+#define CONFIG_MB_UART_TXD      23
+#define CONFIG_MB_UART_RTS      18 // esp32->18
 
 #elif CONFIG_IDF_TARGET_ESP32S3
 
@@ -91,7 +91,6 @@ static EventGroupHandle_t wifi_event_group;
 
 #define MB_PORT_NUM 2         // Number of UART port used for Modbus connection
 #define MB_DEV_SPEED 9600     // The communication speed of the UART
-
 
 #define CONFIG_MB_COMM_MODE_RTU 1
 
@@ -109,18 +108,14 @@ static EventGroupHandle_t wifi_event_group;
 #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (1)
+#define POLL_TIMEOUT_MS (10)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
 // The macro to get offset for parameter in the appropriate structure
-#define HOLD_OFFSET(field) ((uint16_t)(offsetof(holding_reg_params_t, field) + 1))
 #define INPUT_OFFSET(field) ((uint16_t)(offsetof(input_reg_params_t, field) + 1))
-#define COIL_OFFSET(field) ((uint16_t)(offsetof(coil_reg_params_t, field) + 1))
-// Discrete offset macro
-#define DISCR_OFFSET(field) ((uint16_t)(offsetof(discrete_reg_params_t, field) + 1))
 
 #define STR(fieldname) ((const char *)(fieldname))
 // Options can be used as bit masks or parameter limits
@@ -134,11 +129,8 @@ static EventGroupHandle_t wifi_event_group;
 
 static int config_publish_period = APP_DELAY_ONE_SEC;
 
-// static float temperature = 25.0;
-// static float humidity = 85.0;
-
 // static char energymeter_stream[] = "energymeter_stream";
-static char energymeter_stream[] = "nds_test_stream";
+static char energymeter_stream[] = "nds_test_modbus";
 
 static bytebeam_client_t bytebeam_client;
 
@@ -160,14 +152,14 @@ enum
 {
     CID_MFM384_INP_DATA_V_1 = 0,
     CID_MFM384_INP_DATA_V_2,
-    CID_MFM384_INP_DATA_V_3,
+    // CID_MFM384_INP_DATA_V_3,
     // CID_MFM384_INP_DATA_I1,
     // CID_MFM384_INP_DATA_I2,
     // CID_MFM384_INP_DATA_I3,
-    // CID_MFM384_INP_DATA_AVG_I,
-    // CID_MFM384_INP_DATA_FREQUENCY,
+    CID_MFM384_INP_DATA_AVG_I,
+    CID_MFM384_INP_DATA_FREQUENCY,
     // CID_MFM384_INP_DATA_KW,
-    // CID_MFM384_INP_DATA_KWH,
+    CID_MFM384_INP_DATA_KWH,
     // CID_MFM384_INP_DATA_PF_AVG, 
     CID_COUNT
 };
@@ -176,14 +168,14 @@ typedef struct param_energymeter
 {
     float voltage_1;
     float voltage_2;
-    float voltage_3;
-    // float current_avg;
+    // float voltage_3;
+    float current_avg;
     // float current_1;
     // float current_2;
     // float current_3;
     // float total_kw;
-    // float total_kwh;
-    // float frequencey;
+    float frequencey;
+    float total_kwh;
     // float avg_pf;
 } param_energymeter_t;
 
@@ -201,14 +193,14 @@ bool flag_new_modbus_data_available = false;
 // Access Mode - can be used to implement custom options for processing of characteristic (Read/Write restrictions, factory mode values and etc).
 const mb_parameter_descriptor_t device_parameters[] = {
     // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size, Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
-    {CID_MFM384_INP_DATA_V_1, STR("Voltage 1"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
-     INPUT_OFFSET(volatage_1), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    {CID_MFM384_INP_DATA_V_1, STR("Voltage_1"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
 
-    {CID_MFM384_INP_DATA_V_2, STR("Voltage 2"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 2, 2,
-     INPUT_OFFSET(volatage_2), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    {CID_MFM384_INP_DATA_V_2, STR("Voltage_2"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 2, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
 
-    {CID_MFM384_INP_DATA_V_3, STR("Voltage 3"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 4, 2,
-     INPUT_OFFSET(volatage_3), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},          
+    // {CID_MFM384_INP_DATA_V_3, STR("Voltage 3"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 4, 2,
+    //  INPUT_OFFSET(volatage_3), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},          
 
     // {CID_MFM384_INP_DATA_I1, STR("Current I1"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 16, 2,
     //  INPUT_OFFSET(current_1), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
@@ -219,14 +211,14 @@ const mb_parameter_descriptor_t device_parameters[] = {
     // {CID_MFM384_INP_DATA_I3, STR("Current I3"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 20, 2,
     //  INPUT_OFFSET(current_3), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},   
 
-    // {CID_MFM384_INP_DATA_AVG_I, STR("Current avg"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 22, 2,
-    //  INPUT_OFFSET(current_avg), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},   
+    {CID_MFM384_INP_DATA_AVG_I, STR("Current_avg"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 22, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},   
 
-    // {CID_MFM384_INP_DATA_FREQUENCY, STR("Frequency"), STR("Hz"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 56, 2,
-    //  INPUT_OFFSET(frequencey), PARAM_TYPE_FLOAT, 4, OPTS(0, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    {CID_MFM384_INP_DATA_FREQUENCY, STR("Frequency"), STR("Hz"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 56, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
 
-    // {CID_MFM384_INP_DATA_KWH, STR("Units"), STR("KWh"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 58, 2,
-    //  INPUT_OFFSET(total_kwh), PARAM_TYPE_FLOAT, 4, OPTS(0, 10000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    {CID_MFM384_INP_DATA_KWH, STR("Units"), STR("KWh"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 58, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER}
     
     // {CID_MFM384_INP_DATA_KW, STR("KW"), STR("KW"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 42, 2,
     //  INPUT_OFFSET(total_kw), PARAM_TYPE_FLOAT, 4, OPTS(0, 10000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
@@ -367,6 +359,65 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
     return ESP_OK;
 }
 
+static void mb_master_operation(void *arg) {
+
+    const mb_parameter_descriptor_t* param_descriptor = NULL;    
+    uint8_t type = 0;
+    // esp_err_t err = ESP_OK;
+    uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
+
+    while(1) {
+        // Read all found characteristics from slave(s)
+        // for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
+        for (uint16_t cid = 0; cid < MASTER_MAX_CIDS; cid++)
+        {
+            ESP_LOGI(TAG, "CID Value : %d", cid);
+            // Get the information for characteristic cid from data dictionary
+            esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
+
+            ESP_LOGI(TAG, "CID: %d, Key: %s, Addr: %d", 
+                            param_descriptor->cid,
+                            param_descriptor->param_key,
+                            param_descriptor->mb_reg_start);
+    
+            if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
+
+                // uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
+
+                esp_err_t err_get_param = mbc_master_get_parameter(param_descriptor->cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
+
+
+                if (err_get_param == ESP_OK) {
+                    ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
+                                        param_descriptor->cid,
+                                        type,
+                                        (char*)param_descriptor->param_key,
+                                        (char*)param_descriptor->param_units,                                        
+                                        *(float*)temp_data);
+                                        // *(uint32_t*)temp_data);
+                } else {
+                    ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
+                                    param_descriptor->cid,
+                                    type,
+                                    (char*)param_descriptor->param_key,
+                                    (int)err_get_param,
+                                    (char*)esp_err_to_name(err_get_param));
+                                    // break;
+                }
+
+                //  vTaskDelay(POLL_TIMEOUT_TICS); // timeout between polls
+
+            } else {
+                ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
+            }
+
+             vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); 
+        }
+    }
+}
+
+
+
 // User operation function to read slave values and check alarm
 static void modbus_master_operation(void *arg)
 {
@@ -419,12 +470,12 @@ static void modbus_master_operation(void *arg)
                             case CID_MFM384_INP_DATA_V_2:
                                 energyvals.voltage_2 = value;
                                 break;    
-                            case CID_MFM384_INP_DATA_V_3:
-                                energyvals.voltage_3 = value;
-                                break;                                                                
-                            // case CID_MFM384_INP_DATA_AVG_I:
-                            //     energyvals.current_avg = value;
-                            //     break;                                
+                            // case CID_MFM384_INP_DATA_V_3:
+                            //     energyvals.voltage_3 = value;
+                            //     break;                                                                
+                            case CID_MFM384_INP_DATA_AVG_I:
+                                energyvals.current_avg = value;
+                                break;                                
                             // case CID_MFM384_INP_DATA_I1:
                             //     energyvals.current_1 = value;
                             //     break;
@@ -437,12 +488,12 @@ static void modbus_master_operation(void *arg)
                             // case CID_MFM384_INP_DATA_KW:
                             //     energyvals.total_kw = value;
                             //     break;
-                            // case CID_MFM384_INP_DATA_KWH:
-                            //     energyvals.total_kwh = value;
-                            //     break;                            
-                            // case CID_MFM384_INP_DATA_FREQUENCY:
-                            //     energyvals.frequencey = value;
-                            //     break;
+                            case CID_MFM384_INP_DATA_KWH:
+                                energyvals.total_kwh = value;
+                                break;                            
+                            case CID_MFM384_INP_DATA_FREQUENCY:
+                                energyvals.frequencey = value;
+                                break;
                             // case CID_MFM384_INP_DATA_PF_AVG:
                             //     energyvals.avg_pf = value;
                             //     break;                                
@@ -565,117 +616,6 @@ static void get_device_service_name(char *service_name, size_t max)
              ssid_prefix, eth_mac[3], eth_mac[4], eth_mac[5]);
 }
 
-#if 0
-static void event_handler(void *arg, esp_event_base_t event_base,
-                          int32_t event_id, void *event_data)
-{
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
-    {
-        esp_wifi_connect();
-    }
-    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
-    {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY)
-        {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
-        }
-        else
-        {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
-        ESP_LOGI(TAG, "connect to the AP fail");
-    }
-    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
-    {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-    }
-}
-
-#endif
-
-
-#if 0
-void wifi_init_sta(void)
-{
-#if 1
-    s_wifi_event_group = xEventGroupCreate();
-
-    ESP_ERROR_CHECK(esp_netif_init());
-
-    // ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-#endif
-
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                        IP_EVENT_STA_GOT_IP,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_got_ip));
-
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .password = EXAMPLE_ESP_WIFI_PASS,
-            /* Setting a password implies station will connect to all security modes including WEP/WPA.
-             * However these modes are deprecated and not advisable to be used. Incase your Access point
-             * doesn't support WPA2, these mode can be enabled by commenting below line */
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-        },
-    };
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-
-    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                           pdFALSE,
-                                           pdFALSE,
-                                           portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
-     * happened. */
-    if (bits & WIFI_CONNECTED_BIT)
-    {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-    }
-    else if (bits & WIFI_FAIL_BIT)
-    {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-    }
-    else
-    {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
-
-    /* The event will not be processed after unregister */
-    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
-    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
-    vEventGroupDelete(s_wifi_event_group);
-}
-
-#endif
-
 static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
 {
     struct timeval te;
@@ -689,14 +629,14 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     cJSON *device_status_json = NULL;
     cJSON *voltage_1_json = NULL;
     cJSON *voltage_2_json = NULL;
-    cJSON *voltage_3_json = NULL;
+    // cJSON *voltage_3_json = NULL;
     // cJSON *current_1_json = NULL;
     // cJSON *current_2_json = NULL;
     // cJSON *current_3_json = NULL;
-    // cJSON *current_avg_json  = NULL;
+    cJSON *current_avg_json  = NULL;
     // cJSON *totalkw_json = NULL;
-    // cJSON *totalkwh_json = NULL;
-    // cJSON *frequency_json = NULL;
+    cJSON *totalkwh_json = NULL;
+    cJSON *frequency_json = NULL;
     // cJSON *avg_pf_json = NULL;    
 
     char *string_json = NULL;
@@ -745,31 +685,8 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
 
     cJSON_AddItemToObject(device_shadow_json, "sequence", sequence_json);
 
-    // Add voltage
-    // voltage_v1_json = cJSON_CreateNumber(energyvals.volatage);
-
-    // if (voltage_v1_json == NULL)
-    // {
-    //     ESP_LOGE(TAG, "Json add voltage failed.");
-    //     cJSON_Delete(device_shadow_json_list);
-    //     return -1;
-    // }
-    // cJSON_AddItemToObject(device_shadow_json, "voltage", voltage_v1_json);
-
-
-    // // Add voltage 2
-    // voltage_2_json = cJSON_CreateNumber(energyvals.volatage_2);
-
-    // if (voltage_2_json == NULL)
-    // {
-    //     ESP_LOGE(TAG, "Json add voltage failed.");
-    //     cJSON_Delete(device_shadow_json_list);
-    //     return -1;
-    // }
-    // cJSON_AddItemToObject(device_shadow_json, "voltage", voltage_2_json);
-
     // Add Voltage 1
-    voltage_1_json = cJSON_CreateNumber(200);
+    voltage_1_json = cJSON_CreateNumber(energyvals.voltage_1);
     if (voltage_1_json == NULL)
     {
         ESP_LOGE(TAG, "Json add voltage 1 failed.");
@@ -788,19 +705,19 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     }
     cJSON_AddItemToObject(device_shadow_json, "voltage_2", voltage_2_json);
 
-    // Add Voltage 3
-    voltage_3_json = cJSON_CreateNumber(energyvals.voltage_3);
-    if (voltage_3_json == NULL)
-    {
-        ESP_LOGE(TAG, "Json add voltage 3 failed.");
-        cJSON_Delete(device_shadow_json_list);
-        return -1;
-    }
-    cJSON_AddItemToObject(device_shadow_json, "voltage_3", voltage_3_json);
+    // // Add Voltage 3
+    // voltage_3_json = cJSON_CreateNumber(energyvals.voltage_3);
+    // if (voltage_3_json == NULL)
+    // {
+    //     ESP_LOGE(TAG, "Json add voltage 3 failed.");
+    //     cJSON_Delete(device_shadow_json_list);
+    //     return -1;
+    // }
+    // cJSON_AddItemToObject(device_shadow_json, "voltage_3", voltage_3_json);
 
-    #if 0    
+ 
     // Add Avg I
-    current_avg_json = cJSON_CreateNumber(energyvals.voltage_3);
+    current_avg_json = cJSON_CreateNumber(energyvals.current_avg);
     if (current_avg_json == NULL)
     {
         ESP_LOGE(TAG, "Json add voltage 3 failed.");
@@ -808,7 +725,8 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
         return -1;
     }
     cJSON_AddItemToObject(device_shadow_json, "avg_current", current_avg_json);
-
+    
+#if 0   
     // Add Current 1
     current_1_json = cJSON_CreateNumber(energyvals.current_1);
     if (current_1_json == NULL)
@@ -838,20 +756,7 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
         return -1;
     }
     cJSON_AddItemToObject(device_shadow_json, "current_3", current_3_json);
-#endif 
-
-    // Add Current
-    // current_i1_json = cJSON_CreateNumber(energyvals.current);
-
-    // if (current_i1_json == NULL)
-    // {
-    //     ESP_LOGE(TAG, "Json add Current failed.");
-    //     cJSON_Delete(device_shadow_json_list);
-    //     return -1;
-    // }
-    // cJSON_AddItemToObject(device_shadow_json, "current", current_i1_json);
-
-    #if 0
+    
     // Add total KW
     totalkw_json = cJSON_CreateNumber(energyvals.total_kw);
 
@@ -863,6 +768,7 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     }
 
     cJSON_AddItemToObject(device_shadow_json, "totalkw", totalkw_json);
+#endif 
 
     // Add total KWh
     totalkwh_json = cJSON_CreateNumber(energyvals.total_kwh);
@@ -889,17 +795,15 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     cJSON_AddItemToObject(device_shadow_json, "frequency", frequency_json);
 
     // Add pf
-    avg_pf_json = cJSON_CreateNumber(energyvals.avg_pf);
+    // avg_pf_json = cJSON_CreateNumber(energyvals.avg_pf);
 
-    if (avg_pf_json == NULL)
-    {
-        ESP_LOGE(TAG, "Json add humidity failed.");
-        cJSON_Delete(device_shadow_json_list);
-        return -1;
-    }
-    cJSON_AddItemToObject(device_shadow_json, "avg_pf", avg_pf_json);
-
-    #endif
+    // if (avg_pf_json == NULL)
+    // {
+    //     ESP_LOGE(TAG, "Json add humidity failed.");
+    //     cJSON_Delete(device_shadow_json_list);
+    //     return -1;
+    // }
+    // cJSON_AddItemToObject(device_shadow_json, "avg_pf", avg_pf_json);
     
     cJSON_AddItemToArray(device_shadow_json_list, device_shadow_json);
 
@@ -1155,7 +1059,11 @@ void app_main(void)
     ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
 
-    xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+    // xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+
+    xTaskCreate(mb_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+
+    
 
     #if 0
     // sync time from the ntp
