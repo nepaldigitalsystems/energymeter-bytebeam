@@ -50,7 +50,7 @@
 
 #include "modbus_params.h" // for modbus parameters structures
 #include "mbcontroller.h"
-#include "sdkconfig.h"
+// #include "mb_sdkconfig.h"
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
@@ -66,6 +66,8 @@
 #define PROV_TRANSPORT_SOFTAP 1
 #define CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP 1
 #define CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE 1
+
+#define CONFIG_FMB_SERIAL_BUF_SIZE  20
 
 /* Signal Wi-Fi events on this event-group */
 const int WIFI_CONNECTED_EVENT = BIT0;
@@ -92,10 +94,8 @@ static EventGroupHandle_t wifi_event_group;
 #define MB_PORT_NUM 2         // Number of UART port used for Modbus connection
 #define MB_DEV_SPEED 9600     // The communication speed of the UART
 
-#define CONFIG_MB_COMM_MODE_RTU 1
-
-// Note: Some pins on target chip cannot be assigned for UART communication.
-// See UART documentation for selected board and target to configure pins using Kconfig.
+// #define CONFIG_MB_COMM_MODE_RTU 1
+#define CONFIG_FMB_COMM_MODE_RTU_EN 1
 
 // The number of parameters that intended to be used in the particular control process
 #define MASTER_MAX_CIDS num_device_parameters
@@ -114,10 +114,9 @@ static EventGroupHandle_t wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
-// The macro to get offset for parameter in the appropriate structure
-#define INPUT_OFFSET(field) ((uint16_t)(offsetof(input_reg_params_t, field) + 1))
 
 #define STR(fieldname) ((const char *)(fieldname))
+
 // Options can be used as bit masks or parameter limits
 #define OPTS(min_val, max_val, step_val)                   \
     {                                                      \
@@ -134,7 +133,7 @@ static char energymeter_stream[] = "nds_test_modbus";
 
 static bytebeam_client_t bytebeam_client;
 
-static const char *TAG = "ENERGYMETER-BYTEBEAM";
+static const char *TAG = "ENRG_BYTEBEAM";
 
 static int s_retry_num = 0;
 
@@ -182,15 +181,7 @@ typedef struct param_energymeter
 param_energymeter_t energyvals;
 
 bool flag_new_modbus_data_available = false;
-// Example Data (Object) Dictionary for Modbus parameters:
-// The CID field in the table must be unique.
-// Modbus Slave Addr field defines slave address of the device with correspond parameter.
-// Modbus Reg Type - Type of Modbus register area (Holding register, Input Register and such).
-// Reg Start field defines the start Modbus register number and Reg Size defines the number of registers for the characteristic accordingly.
-// The Instance Offset defines offset in the appropriate parameter structure that will be used as instance to save parameter value.
-// Data Type, Data Size specify type of the characteristic and its data size.
-// Parameter Options field specifies the options that can be used to process parameter value (limits or masks).
-// Access Mode - can be used to implement custom options for processing of characteristic (Read/Write restrictions, factory mode values and etc).
+
 const mb_parameter_descriptor_t device_parameters[] = {
     // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size, Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
     {CID_MFM384_INP_DATA_V_1, STR("Voltage_1"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
@@ -231,40 +222,6 @@ const mb_parameter_descriptor_t device_parameters[] = {
 // Calculate number of parameters in the table
 const uint16_t num_device_parameters = (sizeof(device_parameters) / sizeof(device_parameters[0]));
 // const uint16_t num_device_parameters = 10;
-
-// The function to get pointer to parameter storage (instance) according to parameter description table
-static void *master_get_param_data(const mb_parameter_descriptor_t *param_descriptor)
-{
-    assert(param_descriptor != NULL);
-    void *instance_ptr = NULL;
-    if (param_descriptor->param_offset != 0)
-    {
-        switch (param_descriptor->mb_param_type)
-        {
-        case MB_PARAM_HOLDING:
-            //    instance_ptr = ((void*)&holding_reg_params + param_descriptor->param_offset - 1);
-            break;
-        case MB_PARAM_INPUT:
-            instance_ptr = ((void *)&input_reg_params + param_descriptor->param_offset - 1);
-            break;
-        case MB_PARAM_COIL:
-            //    instance_ptr = ((void*)&coil_reg_params + param_descriptor->param_offset - 1);
-            break;
-        case MB_PARAM_DISCRETE:
-            //    instance_ptr = ((void*)&discrete_reg_params + param_descriptor->param_offset - 1);
-            break;
-        default:
-            instance_ptr = NULL;
-            break;
-        }
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Wrong parameter offset for CID #%d", param_descriptor->cid);
-        assert(instance_ptr != NULL);
-    }
-    return instance_ptr;
-}
 
 
 /* Event handler for catching system events */
@@ -371,18 +328,16 @@ static void mb_master_operation(void *arg) {
         // for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
         for (uint16_t cid = 0; cid < MASTER_MAX_CIDS; cid++)
         {
-            ESP_LOGI(TAG, "CID Value : %d", cid);
+            // ESP_LOGI(TAG, "CID Value : %d", cid);
             // Get the information for characteristic cid from data dictionary
             esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
 
-            ESP_LOGI(TAG, "CID: %d, Key: %s, Addr: %d", 
-                            param_descriptor->cid,
-                            param_descriptor->param_key,
-                            param_descriptor->mb_reg_start);
+            // ESP_LOGI(TAG, "CID: %d, Key: %s, Addr: %d", 
+            //                 param_descriptor->cid,
+            //                 param_descriptor->param_key,
+            //                 param_descriptor->mb_reg_start);
     
             if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
-
-                // uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
 
                 esp_err_t err_get_param = mbc_master_get_parameter(param_descriptor->cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
 
@@ -402,6 +357,7 @@ static void mb_master_operation(void *arg) {
                                     (char*)param_descriptor->param_key,
                                     (int)err_get_param,
                                     (char*)esp_err_to_name(err_get_param));
+                                    cid++;
                                     // break;
                 }
 
@@ -439,8 +395,10 @@ static void modbus_master_operation(void *arg)
             err = mbc_master_get_cid_info(cid, &param_descriptor);
             if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL))
             {
-                void *temp_data_ptr = master_get_param_data(param_descriptor);
-                assert(temp_data_ptr);
+                // void *temp_data_ptr = master_get_param_data(param_descriptor);
+                uint8_t temp_data_ptr[4] = {0};
+
+                // assert(temp_data_ptr);
                 uint8_t type = 0;
                 {
                     err = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key,
@@ -502,22 +460,22 @@ static void modbus_master_operation(void *arg)
                                 flag_new_modbus_data_available = true;
                             }
                         }
-                        else
-                        {
-                            uint16_t state = *(uint16_t *)temp_data_ptr;
-                            const char *rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
-                            ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %s (0x%x) read successful.",
-                                     param_descriptor->cid,
-                                     (char *)param_descriptor->param_key,
-                                     (char *)param_descriptor->param_units,
-                                     (const char *)rw_str,
-                                     *(uint16_t *)temp_data_ptr);
-                            if (state & param_descriptor->param_opts.opt1)
-                            {
-                                alarm_state = true;
-                                break;
-                            }
-                        }
+                        // else
+                        // {
+                        //     uint16_t state = *(uint16_t *)temp_data_ptr;
+                        //     const char *rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
+                        //     ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %s (0x%x) read successful.",
+                        //              param_descriptor->cid,
+                        //              (char *)param_descriptor->param_key,
+                        //              (char *)param_descriptor->param_units,
+                        //              (const char *)rw_str,
+                        //              *(uint16_t *)temp_data_ptr);
+                        //     if (state & param_descriptor->param_opts.opt1)
+                        //     {
+                        //         alarm_state = true;
+                        //         break;
+                        //     }
+                        // }
                     }
                     else
                     {

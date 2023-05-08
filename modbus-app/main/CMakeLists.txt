@@ -12,4 +12,10 @@ idf_component_register(SRCS "main.c"
                                         "esp_wifi"
                                         "driver"
                                         "json"
-                        REQUIRES modbus_common freemodbus nvs_flash wifi_provisioning)
+                        REQUIRES esp-modbus modbus_common nvs_flash wifi_provisioning)
+
+
+# set(EXCLUDE_COMPONENTS freemodbus)
+
+
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
