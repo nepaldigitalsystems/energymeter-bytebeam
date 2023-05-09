@@ -92,7 +92,7 @@ static EventGroupHandle_t wifi_event_group;
 #endif
 
 #define MB_PORT_NUM 2         // Number of UART port used for Modbus connection
-#define MB_DEV_SPEED 9600     // The communication speed of the UART
+#define MB_DEV_SPEED 19200     // The communication speed of the UART
 
 // #define CONFIG_MB_COMM_MODE_RTU 1
 #define CONFIG_FMB_COMM_MODE_RTU_EN 1
@@ -104,11 +104,11 @@ static EventGroupHandle_t wifi_event_group;
 #define MASTER_MAX_RETRY 30
 
 // Timeout to update cid over Modbus
-#define UPDATE_CIDS_TIMEOUT_MS (500)
+#define UPDATE_CIDS_TIMEOUT_MS (100)
 #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (10)
+#define POLL_TIMEOUT_MS (1)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 #define WIFI_CONNECTED_BIT BIT0
@@ -143,7 +143,7 @@ static EventGroupHandle_t s_wifi_event_group;
 // Enumeration of modbus device addresses accessed by master device
 enum
 {
-    MB_DEVICE_ADDR1 = 2 // Only one slave device used for the test (add other slave addresses here)
+    MB_DEVICE_ADDR1 = 1 // Only one slave device used for the test (add other slave addresses here)
 };
 
 // Enumeration of all supported CIDs for device (used in parameter definition table)
@@ -151,15 +151,15 @@ enum
 {
     CID_MFM384_INP_DATA_V_1 = 0,
     CID_MFM384_INP_DATA_V_2,
-    // CID_MFM384_INP_DATA_V_3,
-    // CID_MFM384_INP_DATA_I1,
-    // CID_MFM384_INP_DATA_I2,
-    // CID_MFM384_INP_DATA_I3,
+    CID_MFM384_INP_DATA_V_3,
+    CID_MFM384_INP_DATA_I1,
+    CID_MFM384_INP_DATA_I2,
+    CID_MFM384_INP_DATA_I3,
     CID_MFM384_INP_DATA_AVG_I,
+    CID_MFM384_INP_DATA_KW,
+    CID_MFM384_INP_DATA_PF_AVG, 
     CID_MFM384_INP_DATA_FREQUENCY,
-    // CID_MFM384_INP_DATA_KW,
     CID_MFM384_INP_DATA_KWH,
-    // CID_MFM384_INP_DATA_PF_AVG, 
     CID_COUNT
 };
 
@@ -190,32 +190,32 @@ const mb_parameter_descriptor_t device_parameters[] = {
     {CID_MFM384_INP_DATA_V_2, STR("Voltage_2"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 2, 2,
      0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
 
-    // {CID_MFM384_INP_DATA_V_3, STR("Voltage 3"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 4, 2,
-    //  INPUT_OFFSET(volatage_3), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},          
+    {CID_MFM384_INP_DATA_V_3, STR("Voltage_3"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 4, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},          
 
-    // {CID_MFM384_INP_DATA_I1, STR("Current I1"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 16, 2,
-    //  INPUT_OFFSET(current_1), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    {CID_MFM384_INP_DATA_I1, STR("Current_I1"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 16, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
 
-    // {CID_MFM384_INP_DATA_I2, STR("Current I2"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 18, 2,
-    //  INPUT_OFFSET(current_2), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
+    {CID_MFM384_INP_DATA_I2, STR("Current_I2"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 18, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
 
-    // {CID_MFM384_INP_DATA_I3, STR("Current I3"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 20, 2,
-    //  INPUT_OFFSET(current_3), PARAM_TYPE_FLOAT, 4, OPTS(-100, 100, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},   
+    {CID_MFM384_INP_DATA_I3, STR("Current_I3"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 20, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},  
 
     {CID_MFM384_INP_DATA_AVG_I, STR("Current_avg"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 22, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},   
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},      
+
+    {CID_MFM384_INP_DATA_KW, STR("Kilo_Watt"), STR("KW"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 42, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
+
+    {CID_MFM384_INP_DATA_PF_AVG, STR("Power Factor"), STR("pf"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 54, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
 
     {CID_MFM384_INP_DATA_FREQUENCY, STR("Frequency"), STR("Hz"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 56, 2,
      0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
 
     {CID_MFM384_INP_DATA_KWH, STR("Units"), STR("KWh"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 58, 2,
      0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER}
-    
-    // {CID_MFM384_INP_DATA_KW, STR("KW"), STR("KW"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 42, 2,
-    //  INPUT_OFFSET(total_kw), PARAM_TYPE_FLOAT, 4, OPTS(0, 10000, 0.1), PAR_PERMS_READ_WRITE_TRIGGER},
-
-    // {CID_MFM384_INP_DATA_PF_AVG, STR("pf"), STR("none"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 54, 2,
-    //  INPUT_OFFSET(avg_pf), PARAM_TYPE_FLOAT, 4, OPTS(0, 1, 0.001), PAR_PERMS_READ_WRITE_TRIGGER}
      
 };
 
@@ -316,16 +316,108 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
     return ESP_OK;
 }
 
+static esp_err_t mb_master_read(uint8_t cid, float * d) {
+
+    const mb_parameter_descriptor_t* param_descriptor = NULL;    
+    uint8_t type = 0;
+    uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
+
+    esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
+
+
+    if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
+
+        esp_err_t err_get_param = mbc_master_get_parameter(param_descriptor->cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
+
+
+        // if (err_get_param == ESP_OK) {
+            ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
+                                param_descriptor->cid,
+                                type,
+                                (char*)param_descriptor->param_key,
+                                (char*)param_descriptor->param_units,                                        
+                                *(float*)temp_data);
+
+                                *d = *(float*)temp_data;
+                                
+                                // *(uint32_t*)temp_data);
+        // } else {
+        //     ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
+        //                     param_descriptor->cid,
+        //                     type,
+        //                     (char*)param_descriptor->param_key,
+        //                     (int)err_get_param,
+        //                     (char*)esp_err_to_name(err_get_param));
+        //                     // cid++;
+        //                     // break;
+        // }
+    } else {
+        ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
+    }
+
+    return err;
+}
+
 static void mb_master_operation(void *arg) {
+
+
+    #if 1
+
+    while(1) {        
+        for (uint16_t cid = 0; cid < MASTER_MAX_CIDS; cid++) {
+            float data_val = 0.0;
+
+
+            esp_err_t error =  mb_master_read(cid, &data_val);
+
+            #if 0
+            if(ESP_OK == error) {
+            
+                switch (cid)
+                {
+                case CID_MFM384_INP_DATA_V_1:
+                    ESP_LOGI(TAG, "CID: %d, Voltage 1: %f", CID_MFM384_INP_DATA_V_1, data_val);                
+                    break;
+                case CID_MFM384_INP_DATA_V_2:
+                    ESP_LOGI(TAG, "CID: %d, Voltage 2: %f", CID_MFM384_INP_DATA_V_2, data_val);      
+                    break;  
+                case CID_MFM384_INP_DATA_V_3:
+                    ESP_LOGI(TAG, "CID: %d, Voltage 3: %f", CID_MFM384_INP_DATA_V_3, data_val);      
+                    break;                                                                                      
+                case CID_MFM384_INP_DATA_AVG_I:
+                    ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
+                    break;  
+                case CID_MFM384_INP_DATA_KW:
+                    ESP_LOGI(TAG, "CID: %d, KW %f", CID_MFM384_INP_DATA_KW, data_val);      
+                    break;                                                                             
+                case CID_MFM384_INP_DATA_FREQUENCY:
+                    ESP_LOGI(TAG, "CID: %d, Freq: %f", CID_MFM384_INP_DATA_FREQUENCY, data_val);      
+                    break;
+                case CID_MFM384_INP_DATA_KWH:
+                    ESP_LOGI(TAG, "CID: %d, KWH %f", CID_MFM384_INP_DATA_KWH, data_val);      
+                    break;                       
+                }
+            } 
+            #endif           
+            
+        }
+        printf("%s", "------------------------------------------------------------------------------\n");
+        vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); 
+    }
+
+    #else
 
     const mb_parameter_descriptor_t* param_descriptor = NULL;    
     uint8_t type = 0;
     // esp_err_t err = ESP_OK;
     uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
 
+    ESP_LOGI(TAG, "MASTER_MAX_CIDS: %d", MASTER_MAX_CIDS);
+
     while(1) {
         // Read all found characteristics from slave(s)
         // for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
+        
         for (uint16_t cid = 0; cid < MASTER_MAX_CIDS; cid++)
         {
             // ESP_LOGI(TAG, "CID Value : %d", cid);
@@ -357,21 +449,21 @@ static void mb_master_operation(void *arg) {
                                     (char*)param_descriptor->param_key,
                                     (int)err_get_param,
                                     (char*)esp_err_to_name(err_get_param));
-                                    cid++;
+                                    // cid++;
                                     // break;
                 }
 
-                //  vTaskDelay(POLL_TIMEOUT_TICS); // timeout between polls
+                 vTaskDelay(POLL_TIMEOUT_TICS); // timeout between polls
 
             } else {
                 ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
             }
-
-             vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); 
+            printf("%s", "------------------------------------------------------------------------------\n");
+            vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); 
         }
     }
+    #endif 
 }
-
 
 
 // User operation function to read slave values and check alarm
@@ -902,6 +994,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
 
+#if 0
     /* Initialize Wi-Fi including netif with default config */
     esp_netif_create_default_wifi_sta();
 #ifdef CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP
@@ -940,7 +1033,7 @@ void app_main(void)
     wifi_prov_mgr_reset_provisioning();
 #else
     /* Let's find out if the device is provisioned */
-    ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
+    // ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
 
 #endif
     /* If device is not yet provisioned start provisioning service */
@@ -1013,7 +1106,7 @@ void app_main(void)
 
     /* Wait for Wi-Fi connection */
     xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_EVENT, false, true, portMAX_DELAY);    
-
+#endif 
     ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
 
