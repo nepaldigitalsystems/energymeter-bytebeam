@@ -104,11 +104,11 @@ static EventGroupHandle_t wifi_event_group;
 #define MASTER_MAX_RETRY 30
 
 // Timeout to update cid over Modbus
-#define UPDATE_CIDS_TIMEOUT_MS (100)
+#define UPDATE_CIDS_TIMEOUT_MS (500)
 #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (1)
+#define POLL_TIMEOUT_MS (10)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 #define WIFI_CONNECTED_BIT BIT0
@@ -167,15 +167,15 @@ typedef struct param_energymeter
 {
     float voltage_1;
     float voltage_2;
-    // float voltage_3;
+    float voltage_3;
     float current_avg;
-    // float current_1;
-    // float current_2;
-    // float current_3;
-    // float total_kw;
+    float current_1;
+    float current_2;
+    float current_3;
+    float total_kw;
     float frequencey;
     float total_kwh;
-    // float avg_pf;
+    float avg_pf;
 } param_energymeter_t;
 
 param_energymeter_t energyvals;
@@ -221,7 +221,6 @@ const mb_parameter_descriptor_t device_parameters[] = {
 
 // Calculate number of parameters in the table
 const uint16_t num_device_parameters = (sizeof(device_parameters) / sizeof(device_parameters[0]));
-// const uint16_t num_device_parameters = 10;
 
 
 /* Event handler for catching system events */
@@ -330,7 +329,7 @@ static esp_err_t mb_master_read(uint8_t cid, float * d) {
         esp_err_t err_get_param = mbc_master_get_parameter(param_descriptor->cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
 
 
-        // if (err_get_param == ESP_OK) {
+        if (err_get_param == ESP_OK) {
             ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
                                 param_descriptor->cid,
                                 type,
@@ -338,19 +337,15 @@ static esp_err_t mb_master_read(uint8_t cid, float * d) {
                                 (char*)param_descriptor->param_units,                                        
                                 *(float*)temp_data);
 
-                                *d = *(float*)temp_data;
-                                
-                                // *(uint32_t*)temp_data);
-        // } else {
-        //     ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
-        //                     param_descriptor->cid,
-        //                     type,
-        //                     (char*)param_descriptor->param_key,
-        //                     (int)err_get_param,
-        //                     (char*)esp_err_to_name(err_get_param));
-        //                     // cid++;
-        //                     // break;
-        // }
+                                *d = *(float*)temp_data;                            
+        } else {
+            ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
+                            param_descriptor->cid,
+                            type,
+                            (char*)param_descriptor->param_key,
+                            (int)err_get_param,
+                            (char*)esp_err_to_name(err_get_param));
+        }
     } else {
         ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
     }
@@ -360,41 +355,62 @@ static esp_err_t mb_master_read(uint8_t cid, float * d) {
 
 static void mb_master_operation(void *arg) {
 
-
-    #if 1
-
     while(1) {        
         for (uint16_t cid = 0; cid < MASTER_MAX_CIDS; cid++) {
             float data_val = 0.0;
 
 
             esp_err_t error =  mb_master_read(cid, &data_val);
+            vTaskDelay(POLL_TIMEOUT_MS); 
 
-            #if 0
+            #if 1
             if(ESP_OK == error) {
             
                 switch (cid)
                 {
                 case CID_MFM384_INP_DATA_V_1:
-                    ESP_LOGI(TAG, "CID: %d, Voltage 1: %f", CID_MFM384_INP_DATA_V_1, data_val);                
+                    // ESP_LOGI(TAG, "CID: %d, Voltage 1: %f", CID_MFM384_INP_DATA_V_1, data_val);    
+                    energyvals.voltage_1 = data_val;        
                     break;
                 case CID_MFM384_INP_DATA_V_2:
-                    ESP_LOGI(TAG, "CID: %d, Voltage 2: %f", CID_MFM384_INP_DATA_V_2, data_val);      
+                    // ESP_LOGI(TAG, "CID: %d, Voltage 2: %f", CID_MFM384_INP_DATA_V_2, data_val);    
+                    energyvals.voltage_2 = data_val;  
                     break;  
                 case CID_MFM384_INP_DATA_V_3:
-                    ESP_LOGI(TAG, "CID: %d, Voltage 3: %f", CID_MFM384_INP_DATA_V_3, data_val);      
-                    break;                                                                                      
+                    // ESP_LOGI(TAG, "CID: %d, Voltage 3: %f", CID_MFM384_INP_DATA_V_3, data_val);  
+                    energyvals.voltage_3 = data_val;    
+                    break; 
+                case CID_MFM384_INP_DATA_I1:
+                    // ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
+                    energyvals.current_1 = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_I2:
+                    // ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
+                    energyvals.current_2 = data_val;  
+                    break;           
+                case CID_MFM384_INP_DATA_I3:
+                    // ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
+                    energyvals.current_3 = data_val;  
+                    break;      
                 case CID_MFM384_INP_DATA_AVG_I:
-                    ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
+                    // ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
+                    energyvals.current_avg = data_val;
                     break;  
                 case CID_MFM384_INP_DATA_KW:
-                    ESP_LOGI(TAG, "CID: %d, KW %f", CID_MFM384_INP_DATA_KW, data_val);      
-                    break;                                                                             
+                    // ESP_LOGI(TAG, "CID: %d, KW %f", CID_MFM384_INP_DATA_KW, data_val);  
+                    energyvals.total_kw = data_val;    
+                    break;        
+                    case CID_MFM384_INP_DATA_PF_AVG:
+                    // ESP_LOGI(TAG, "CID: %d, KW %f", CID_MFM384_INP_DATA_KW, data_val);  
+                    energyvals.avg_pf = data_val;    
+                    break;                                                                                              
                 case CID_MFM384_INP_DATA_FREQUENCY:
-                    ESP_LOGI(TAG, "CID: %d, Freq: %f", CID_MFM384_INP_DATA_FREQUENCY, data_val);      
+                    // ESP_LOGI(TAG, "CID: %d, Freq: %f", CID_MFM384_INP_DATA_FREQUENCY, data_val);  
+                    energyvals.frequencey = data_val;    
                     break;
                 case CID_MFM384_INP_DATA_KWH:
-                    ESP_LOGI(TAG, "CID: %d, KWH %f", CID_MFM384_INP_DATA_KWH, data_val);      
+                    // ESP_LOGI(TAG, "CID: %d, KWH %f", CID_MFM384_INP_DATA_KWH, data_val);      
+                    energyvals.total_kwh = data_val;
                     break;                       
                 }
             } 
@@ -403,199 +419,7 @@ static void mb_master_operation(void *arg) {
         }
         printf("%s", "------------------------------------------------------------------------------\n");
         vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); 
-    }
-
-    #else
-
-    const mb_parameter_descriptor_t* param_descriptor = NULL;    
-    uint8_t type = 0;
-    // esp_err_t err = ESP_OK;
-    uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
-
-    ESP_LOGI(TAG, "MASTER_MAX_CIDS: %d", MASTER_MAX_CIDS);
-
-    while(1) {
-        // Read all found characteristics from slave(s)
-        // for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
-        
-        for (uint16_t cid = 0; cid < MASTER_MAX_CIDS; cid++)
-        {
-            // ESP_LOGI(TAG, "CID Value : %d", cid);
-            // Get the information for characteristic cid from data dictionary
-            esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
-
-            // ESP_LOGI(TAG, "CID: %d, Key: %s, Addr: %d", 
-            //                 param_descriptor->cid,
-            //                 param_descriptor->param_key,
-            //                 param_descriptor->mb_reg_start);
-    
-            if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
-
-                esp_err_t err_get_param = mbc_master_get_parameter(param_descriptor->cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
-
-
-                if (err_get_param == ESP_OK) {
-                    ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
-                                        param_descriptor->cid,
-                                        type,
-                                        (char*)param_descriptor->param_key,
-                                        (char*)param_descriptor->param_units,                                        
-                                        *(float*)temp_data);
-                                        // *(uint32_t*)temp_data);
-                } else {
-                    ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
-                                    param_descriptor->cid,
-                                    type,
-                                    (char*)param_descriptor->param_key,
-                                    (int)err_get_param,
-                                    (char*)esp_err_to_name(err_get_param));
-                                    // cid++;
-                                    // break;
-                }
-
-                 vTaskDelay(POLL_TIMEOUT_TICS); // timeout between polls
-
-            } else {
-                ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
-            }
-            printf("%s", "------------------------------------------------------------------------------\n");
-            vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); 
-        }
-    }
-    #endif 
-}
-
-
-// User operation function to read slave values and check alarm
-static void modbus_master_operation(void *arg)
-{
-    esp_err_t err = ESP_OK;
-    float value = 0;
-    bool alarm_state = false;
-    const mb_parameter_descriptor_t *param_descriptor = NULL;
-
-    ESP_LOGI(TAG, "Start modbus test...");
-
-    for (;;)
-    {
-        // Read all found characteristics from slave(s)
-        for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
-        {
-            // Get data from parameters description table
-            // and use this information to fill the characteristics description table
-            // and having all required fields in just one table
-            err = mbc_master_get_cid_info(cid, &param_descriptor);
-            if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL))
-            {
-                // void *temp_data_ptr = master_get_param_data(param_descriptor);
-                uint8_t temp_data_ptr[4] = {0};
-
-                // assert(temp_data_ptr);
-                uint8_t type = 0;
-                {
-                    err = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key,
-                                                   (uint8_t *)&value, &type);
-                    if (err == ESP_OK)
-                    {
-                        *(float *)temp_data_ptr = value;
-                        if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) ||
-                            (param_descriptor->mb_param_type == MB_PARAM_INPUT))
-                        {
-                            ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %f (0x%x) read successful.",
-                                     param_descriptor->cid,
-                                     (char *)param_descriptor->param_key,
-                                     (char *)param_descriptor->param_units,
-                                     value,
-                                     *(uint32_t *)temp_data_ptr);
-                            // if (((value > param_descriptor->param_opts.max) ||
-                            //     (value < param_descriptor->param_opts.min))) {
-                            //         alarm_state = true;
-                            //         break;
-                            // }
-                            switch (param_descriptor->cid)
-                            {
-                            case CID_MFM384_INP_DATA_V_1:
-                                energyvals.voltage_1 = value;
-                                break;
-                            case CID_MFM384_INP_DATA_V_2:
-                                energyvals.voltage_2 = value;
-                                break;    
-                            // case CID_MFM384_INP_DATA_V_3:
-                            //     energyvals.voltage_3 = value;
-                            //     break;                                                                
-                            case CID_MFM384_INP_DATA_AVG_I:
-                                energyvals.current_avg = value;
-                                break;                                
-                            // case CID_MFM384_INP_DATA_I1:
-                            //     energyvals.current_1 = value;
-                            //     break;
-                            // case CID_MFM384_INP_DATA_I2:
-                            //     energyvals.current_2 = value;
-                            //     break;
-                            // case CID_MFM384_INP_DATA_I3:
-                            //     energyvals.current_3 = value;
-                            //     break;                                                                
-                            // case CID_MFM384_INP_DATA_KW:
-                            //     energyvals.total_kw = value;
-                            //     break;
-                            case CID_MFM384_INP_DATA_KWH:
-                                energyvals.total_kwh = value;
-                                break;                            
-                            case CID_MFM384_INP_DATA_FREQUENCY:
-                                energyvals.frequencey = value;
-                                break;
-                            // case CID_MFM384_INP_DATA_PF_AVG:
-                            //     energyvals.avg_pf = value;
-                            //     break;                                
-                            default:
-                                break;
-                                flag_new_modbus_data_available = true;
-                            }
-                        }
-                        // else
-                        // {
-                        //     uint16_t state = *(uint16_t *)temp_data_ptr;
-                        //     const char *rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
-                        //     ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %s (0x%x) read successful.",
-                        //              param_descriptor->cid,
-                        //              (char *)param_descriptor->param_key,
-                        //              (char *)param_descriptor->param_units,
-                        //              (const char *)rw_str,
-                        //              *(uint16_t *)temp_data_ptr);
-                        //     if (state & param_descriptor->param_opts.opt1)
-                        //     {
-                        //         alarm_state = true;
-                        //         break;
-                        //     }
-                        // }
-                    }
-                    else
-                    {
-                        ESP_LOGE(TAG, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
-                                 param_descriptor->cid,
-                                 (char *)param_descriptor->param_key,
-                                 (int)err,
-                                 (char *)esp_err_to_name(err));
-                    }
-                }
-                vTaskDelay(POLL_TIMEOUT_TICS); // timeout between polls
-            }
-        }
-        vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); //
-    }
-
-    if (alarm_state)
-    {
-        ESP_LOGI(TAG, "Alarm triggered by cid #%d.",
-                 param_descriptor->cid);
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Alarm is not triggered after %d retries.",
-                 MASTER_MAX_RETRY);
-    }
-    ESP_LOGI(TAG, "Destroy master...");
-    ESP_ERROR_CHECK(mbc_master_destroy());
+    } 
 }
 
 // Modbus master initialization
@@ -679,15 +503,15 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     cJSON *device_status_json = NULL;
     cJSON *voltage_1_json = NULL;
     cJSON *voltage_2_json = NULL;
-    // cJSON *voltage_3_json = NULL;
-    // cJSON *current_1_json = NULL;
-    // cJSON *current_2_json = NULL;
-    // cJSON *current_3_json = NULL;
+    cJSON *voltage_3_json = NULL;
+    cJSON *current_1_json = NULL;
+    cJSON *current_2_json = NULL;
+    cJSON *current_3_json = NULL;
     cJSON *current_avg_json  = NULL;
-    // cJSON *totalkw_json = NULL;
+    cJSON *totalkw_json = NULL;
     cJSON *totalkwh_json = NULL;
     cJSON *frequency_json = NULL;
-    // cJSON *avg_pf_json = NULL;    
+    cJSON *avg_pf_json = NULL;    
 
     char *string_json = NULL;
 
@@ -755,28 +579,16 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     }
     cJSON_AddItemToObject(device_shadow_json, "voltage_2", voltage_2_json);
 
-    // // Add Voltage 3
-    // voltage_3_json = cJSON_CreateNumber(energyvals.voltage_3);
-    // if (voltage_3_json == NULL)
-    // {
-    //     ESP_LOGE(TAG, "Json add voltage 3 failed.");
-    //     cJSON_Delete(device_shadow_json_list);
-    //     return -1;
-    // }
-    // cJSON_AddItemToObject(device_shadow_json, "voltage_3", voltage_3_json);
-
- 
-    // Add Avg I
-    current_avg_json = cJSON_CreateNumber(energyvals.current_avg);
-    if (current_avg_json == NULL)
+    // Add Voltage 3
+    voltage_3_json = cJSON_CreateNumber(energyvals.voltage_3);
+    if (voltage_3_json == NULL)
     {
         ESP_LOGE(TAG, "Json add voltage 3 failed.");
         cJSON_Delete(device_shadow_json_list);
         return -1;
     }
-    cJSON_AddItemToObject(device_shadow_json, "avg_current", current_avg_json);
-    
-#if 0   
+    cJSON_AddItemToObject(device_shadow_json, "voltage_3", voltage_3_json);
+
     // Add Current 1
     current_1_json = cJSON_CreateNumber(energyvals.current_1);
     if (current_1_json == NULL)
@@ -807,25 +619,34 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     }
     cJSON_AddItemToObject(device_shadow_json, "current_3", current_3_json);
     
+    // Add Avg I
+    current_avg_json = cJSON_CreateNumber(energyvals.current_avg);
+    if (current_avg_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add current failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+    cJSON_AddItemToObject(device_shadow_json, "avg_current", current_avg_json);
+            
     // Add total KW
     totalkw_json = cJSON_CreateNumber(energyvals.total_kw);
 
-    if (totalkwh_json == NULL)
+    if (totalkw_json == NULL)
     {
-        ESP_LOGE(TAG, "Json add voltage failed.");
+        ESP_LOGE(TAG, "Json add KW failed.");
         cJSON_Delete(device_shadow_json_list);
         return -1;
     }
 
     cJSON_AddItemToObject(device_shadow_json, "totalkw", totalkw_json);
-#endif 
 
     // Add total KWh
     totalkwh_json = cJSON_CreateNumber(energyvals.total_kwh);
 
     if (totalkwh_json == NULL)
     {
-        ESP_LOGE(TAG, "Json add voltage failed.");
+        ESP_LOGE(TAG, "Json add KWh failed.");
         cJSON_Delete(device_shadow_json_list);
         return -1;
     }
@@ -837,7 +658,7 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
 
     if (frequency_json == NULL)
     {
-        ESP_LOGE(TAG, "Json add humidity failed.");
+        ESP_LOGE(TAG, "Json add frequency failed.");
         cJSON_Delete(device_shadow_json_list);
         return -1;
     }
@@ -845,15 +666,17 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     cJSON_AddItemToObject(device_shadow_json, "frequency", frequency_json);
 
     // Add pf
-    // avg_pf_json = cJSON_CreateNumber(energyvals.avg_pf);
+    avg_pf_json = cJSON_CreateNumber(energyvals.avg_pf);
 
-    // if (avg_pf_json == NULL)
-    // {
-    //     ESP_LOGE(TAG, "Json add humidity failed.");
-    //     cJSON_Delete(device_shadow_json_list);
-    //     return -1;
-    // }
-    // cJSON_AddItemToObject(device_shadow_json, "avg_pf", avg_pf_json);
+    if (avg_pf_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add power factor failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+    cJSON_AddItemToObject(device_shadow_json, "avg_pf", avg_pf_json);
+
+
     
     cJSON_AddItemToArray(device_shadow_json_list, device_shadow_json);
 
@@ -868,14 +691,7 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
 
     ESP_LOGI(TAG, "\nStatus to send:\n%s\n", string_json);
 
-    // int ret_val = 0;
-    // if(flag_new_modbus_data_available) {
-    // flag_new_modbus_data_available = false;
-    // publish the json to sht stream
     int ret_val = bytebeam_publish_to_stream(bytebeam_client, energymeter_stream, string_json);
-    // } else {
-    //     ESP_LOGE(TAG, "Could not get new modbus reading");
-    // }
 
     cJSON_Delete(device_shadow_json_list);
     cJSON_free(string_json);
@@ -994,7 +810,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
 
-#if 0
+#if 1
     /* Initialize Wi-Fi including netif with default config */
     esp_netif_create_default_wifi_sta();
 #ifdef CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP
@@ -1112,11 +928,11 @@ void app_main(void)
 
     // xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
 
-    xTaskCreate(mb_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+    xTaskCreate(mb_master_operation, "Modbus Master", 4 * 2048, NULL, tskIDLE_PRIORITY, NULL);
 
     
 
-    #if 0
+    #if 1
     // sync time from the ntp
     sync_time_from_ntp();
 
