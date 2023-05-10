@@ -357,15 +357,9 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
 //     const mb_parameter_descriptor_t* param_descriptor = NULL;    
 //     uint8_t type = 0;
 //     uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
-
 //     esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
-
-
 //     if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
-
 //         esp_err_t err_get_param = mbc_master_get_parameter(param_descriptor->cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
-
-
 //         if (err_get_param == ESP_OK) {
 //             ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
 //                                 param_descriptor->cid,
@@ -373,7 +367,6 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
 //                                 (char*)param_descriptor->param_key,
 //                                 (char*)param_descriptor->param_units,                                        
 //                                 *(float*)temp_data);
-
 //                                 *d = *(float*)temp_data;                            
 //         } else {
 //             ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
@@ -386,20 +379,16 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
 //     } else {
 //         ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
 //     }
-
 //     return err;
 // }
 
 static void mb_master_operation(void *arg) {
-
-
     const mb_parameter_descriptor_t* param_descriptor = NULL;    
     uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
     uint8_t type = 0;
 
     while(1) {        
         static uint8_t cid = 0;
-
         float data_val = 0.0;
 
         if(cid >= CID_COUNT)   cid = 0;
