@@ -72,15 +72,14 @@
 #endif   
 
 
-// #define EXAMPLE_ESP_WIFI_SSID "nepaldigisys"
-// #define EXAMPLE_ESP_WIFI_PASS "NDS_0ffice"
+#define EXAMPLE_ESP_WIFI_SSID "nepaldigisys"
+#define EXAMPLE_ESP_WIFI_PASS "NDS_0ffice"
 
-#define EXAMPLE_ESP_WIFI_SSID "hypnotik_2"
-#define EXAMPLE_ESP_WIFI_PASS "___password"
+// #define EXAMPLE_ESP_WIFI_SSID "hypnotik_2"
+// #define EXAMPLE_ESP_WIFI_PASS "___password"
 
-
-// #define EXAMPLE_ESP_WIFI_SSID "nepaldigisys"
-// #define EXAMPLE_ESP_WIFI_PASS "NDS_0ffice"
+// #define EXAMPLE_ESP_WIFI_SSID "seew_2"
+// #define EXAMPLE_ESP_WIFI_PASS "CLB29B555A"
 
 /* Signal Wi-Fi events on this event-group */
 static EventGroupHandle_t wifi_event_group;
