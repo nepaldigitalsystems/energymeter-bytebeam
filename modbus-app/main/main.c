@@ -62,18 +62,35 @@
 
 #include "bytebeam_sdk.h"
 
+// #define PROVISION_EN
 
-#define PROV_TRANSPORT_SOFTAP 1
-#define CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP 1
-#define CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE 1
 
-#define CONFIG_FMB_SERIAL_BUF_SIZE  20
+#ifdef PROVISION_EN
+    #define PROV_TRANSPORT_SOFTAP 1
+    #define CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP 1
+    #define CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE 1
+#endif   
+
+
+// #define EXAMPLE_ESP_WIFI_SSID "nepaldigisys"
+// #define EXAMPLE_ESP_WIFI_PASS "NDS_0ffice"
+
+#define EXAMPLE_ESP_WIFI_SSID "hypnotik_2"
+#define EXAMPLE_ESP_WIFI_PASS "___password"
+
+
+// #define EXAMPLE_ESP_WIFI_SSID "nepaldigisys"
+// #define EXAMPLE_ESP_WIFI_PASS "NDS_0ffice"
 
 /* Signal Wi-Fi events on this event-group */
-const int WIFI_CONNECTED_EVENT = BIT0;
 static EventGroupHandle_t wifi_event_group;
 
 #define CONFIG_EXAMPLE_PROV_MGR_MAX_RETRY_CNT 10
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT BIT1
+
+
+#define CONFIG_FMB_SERIAL_BUF_SIZE  20
 
 #if CONFIG_IDF_TARGET_ESP32
 
@@ -93,9 +110,8 @@ static EventGroupHandle_t wifi_event_group;
 
 #define MB_PORT_NUM 2         // Number of UART port used for Modbus connection
 #define MB_DEV_SPEED 19200     // The communication speed of the UART
-
-// #define CONFIG_MB_COMM_MODE_RTU 1
 #define CONFIG_FMB_COMM_MODE_RTU_EN 1
+#define MB_DEVICE_ADDR1             1
 
 // The number of parameters that intended to be used in the particular control process
 #define MASTER_MAX_CIDS num_device_parameters
@@ -110,9 +126,6 @@ static EventGroupHandle_t wifi_event_group;
 // Timeout between polls
 #define POLL_TIMEOUT_MS (10)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
-
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT BIT1
 
 
 #define STR(fieldname) ((const char *)(fieldname))
@@ -136,15 +149,6 @@ static bytebeam_client_t bytebeam_client;
 static const char *TAG = "ENRG_BYTEBEAM";
 
 static int s_retry_num = 0;
-
-/* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t s_wifi_event_group;
-
-// Enumeration of modbus device addresses accessed by master device
-enum
-{
-    MB_DEVICE_ADDR1 = 1 // Only one slave device used for the test (add other slave addresses here)
-};
 
 // Enumeration of all supported CIDs for device (used in parameter definition table)
 enum
@@ -223,6 +227,7 @@ const mb_parameter_descriptor_t device_parameters[] = {
 const uint16_t num_device_parameters = (sizeof(device_parameters) / sizeof(device_parameters[0]));
 
 
+#ifdef PROVISION_EN
 /* Event handler for catching system events */
 static void event_handler(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data)
@@ -280,7 +285,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         /* Signal main application to continue execution */
         // s_retry_num = 0;
         retries = 0;
-        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_EVENT);
+        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGI(TAG, "Disconnected. Connecting to the AP again...");
         retries++;
@@ -293,6 +298,39 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         esp_wifi_connect();
     }
 }
+
+#else
+static void event_handler(void *arg, esp_event_base_t event_base,
+                          int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    {
+        esp_wifi_connect();
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+        if (s_retry_num < CONFIG_EXAMPLE_PROV_MGR_MAX_RETRY_CNT)
+        {
+            esp_wifi_connect();
+            s_retry_num++;
+            ESP_LOGI(TAG, "retry to connect to the AP");
+        }
+        else
+        {
+            xEventGroupSetBits(wifi_event_group, WIFI_FAIL_BIT);
+        }
+        ESP_LOGI(TAG, "connect to the AP fail");
+    }
+    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        s_retry_num = 0;
+        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
+#endif // PROVISION_EN
 
 /* Handler for the optional provisioning endpoint registered by the application.
  * The data format can be chosen by applications. Here, we are using plain ascii text.
@@ -315,110 +353,126 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
     return ESP_OK;
 }
 
-static esp_err_t mb_master_read(uint8_t cid, float * d) {
+// static esp_err_t mb_master_read(uint8_t cid, float * d) {
 
-    const mb_parameter_descriptor_t* param_descriptor = NULL;    
-    uint8_t type = 0;
-    uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
+//     const mb_parameter_descriptor_t* param_descriptor = NULL;    
+//     uint8_t type = 0;
+//     uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
 
-    esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
-
-
-    if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
-
-        esp_err_t err_get_param = mbc_master_get_parameter(param_descriptor->cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
+//     esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
 
 
-        if (err_get_param == ESP_OK) {
-            ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
-                                param_descriptor->cid,
-                                type,
-                                (char*)param_descriptor->param_key,
-                                (char*)param_descriptor->param_units,                                        
-                                *(float*)temp_data);
+//     if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
 
-                                *d = *(float*)temp_data;                            
-        } else {
-            ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
-                            param_descriptor->cid,
-                            type,
-                            (char*)param_descriptor->param_key,
-                            (int)err_get_param,
-                            (char*)esp_err_to_name(err_get_param));
-        }
-    } else {
-        ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
-    }
+//         esp_err_t err_get_param = mbc_master_get_parameter(param_descriptor->cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
 
-    return err;
-}
+
+//         if (err_get_param == ESP_OK) {
+//             ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
+//                                 param_descriptor->cid,
+//                                 type,
+//                                 (char*)param_descriptor->param_key,
+//                                 (char*)param_descriptor->param_units,                                        
+//                                 *(float*)temp_data);
+
+//                                 *d = *(float*)temp_data;                            
+//         } else {
+//             ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
+//                             param_descriptor->cid,
+//                             type,
+//                             (char*)param_descriptor->param_key,
+//                             (int)err_get_param,
+//                             (char*)esp_err_to_name(err_get_param));
+//         }
+//     } else {
+//         ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
+//     }
+
+//     return err;
+// }
 
 static void mb_master_operation(void *arg) {
 
+
+    const mb_parameter_descriptor_t* param_descriptor = NULL;    
+    uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
+    uint8_t type = 0;
+
     while(1) {        
-        for (uint16_t cid = 0; cid < MASTER_MAX_CIDS; cid++) {
-            float data_val = 0.0;
+        static uint8_t cid = 0;
+
+        float data_val = 0.0;
+
+        if(cid >= CID_COUNT)   cid = 0;
+
+        esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
+
+        if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
+
+            esp_err_t err_get_param = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
 
 
-            esp_err_t error =  mb_master_read(cid, &data_val);
-            vTaskDelay(POLL_TIMEOUT_MS); 
+            if (err_get_param == ESP_OK) {
+                ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
+                                    param_descriptor->cid,
+                                    type,
+                                    (char*)param_descriptor->param_key,
+                                    (char*)param_descriptor->param_units,                                        
+                                    *(float*)temp_data);
 
-            #if 1
-            if(ESP_OK == error) {
-            
-                switch (cid)
-                {
-                case CID_MFM384_INP_DATA_V_1:
-                    // ESP_LOGI(TAG, "CID: %d, Voltage 1: %f", CID_MFM384_INP_DATA_V_1, data_val);    
-                    energyvals.voltage_1 = data_val;        
-                    break;
-                case CID_MFM384_INP_DATA_V_2:
-                    // ESP_LOGI(TAG, "CID: %d, Voltage 2: %f", CID_MFM384_INP_DATA_V_2, data_val);    
-                    energyvals.voltage_2 = data_val;  
-                    break;  
-                case CID_MFM384_INP_DATA_V_3:
-                    // ESP_LOGI(TAG, "CID: %d, Voltage 3: %f", CID_MFM384_INP_DATA_V_3, data_val);  
-                    energyvals.voltage_3 = data_val;    
-                    break; 
-                case CID_MFM384_INP_DATA_I1:
-                    // ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
-                    energyvals.current_1 = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_I2:
-                    // ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
-                    energyvals.current_2 = data_val;  
-                    break;           
-                case CID_MFM384_INP_DATA_I3:
-                    // ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
-                    energyvals.current_3 = data_val;  
-                    break;      
-                case CID_MFM384_INP_DATA_AVG_I:
-                    // ESP_LOGI(TAG, "CID: %d, Current Avg: %f", CID_MFM384_INP_DATA_AVG_I, data_val);      
-                    energyvals.current_avg = data_val;
-                    break;  
-                case CID_MFM384_INP_DATA_KW:
-                    // ESP_LOGI(TAG, "CID: %d, KW %f", CID_MFM384_INP_DATA_KW, data_val);  
-                    energyvals.total_kw = data_val;    
-                    break;        
-                    case CID_MFM384_INP_DATA_PF_AVG:
-                    // ESP_LOGI(TAG, "CID: %d, KW %f", CID_MFM384_INP_DATA_KW, data_val);  
-                    energyvals.avg_pf = data_val;    
-                    break;                                                                                              
-                case CID_MFM384_INP_DATA_FREQUENCY:
-                    // ESP_LOGI(TAG, "CID: %d, Freq: %f", CID_MFM384_INP_DATA_FREQUENCY, data_val);  
-                    energyvals.frequencey = data_val;    
-                    break;
-                case CID_MFM384_INP_DATA_KWH:
-                    // ESP_LOGI(TAG, "CID: %d, KWH %f", CID_MFM384_INP_DATA_KWH, data_val);      
-                    energyvals.total_kwh = data_val;
-                    break;                       
-                }
-            } 
-            #endif           
-            
-        }
-        printf("%s", "------------------------------------------------------------------------------\n");
-        vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); 
+                                    data_val = *(float*)temp_data;    
+
+                                    switch (param_descriptor->cid)
+                                    {
+                                    case CID_MFM384_INP_DATA_V_1:  
+                                        energyvals.voltage_1 = data_val;        
+                                        break;
+                                    case CID_MFM384_INP_DATA_V_2:
+                                        energyvals.voltage_2 = data_val;  
+                                        break;  
+                                    case CID_MFM384_INP_DATA_V_3:
+                                        energyvals.voltage_3 = data_val;    
+                                        break; 
+                                    case CID_MFM384_INP_DATA_I1:
+                                        energyvals.current_1 = data_val;
+                                        break;
+                                    case CID_MFM384_INP_DATA_I2:
+                                        energyvals.current_2 = data_val;  
+                                        break;           
+                                    case CID_MFM384_INP_DATA_I3:
+                                        energyvals.current_3 = data_val;  
+                                        break;      
+                                    case CID_MFM384_INP_DATA_AVG_I:
+                                        energyvals.current_avg = data_val;
+                                        break;  
+                                    case CID_MFM384_INP_DATA_KW:
+                                        energyvals.total_kw = data_val;    
+                                        break;        
+                                        case CID_MFM384_INP_DATA_PF_AVG:
+                                        energyvals.avg_pf = data_val;    
+                                        break;                                                                                              
+                                    case CID_MFM384_INP_DATA_FREQUENCY:
+                                        energyvals.frequencey = data_val;    
+                                        break;
+                                    case CID_MFM384_INP_DATA_KWH:
+                                        energyvals.total_kwh = data_val;
+                                        break;                   
+                                    }                                                            
+            } else {
+                ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
+                                param_descriptor->cid,
+                                type,
+                                (char*)param_descriptor->param_key,
+                                (int)err_get_param,
+                                (char*)esp_err_to_name(err_get_param));
+                                continue;
+            }
+        } else {
+            ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
+        }  
+
+        cid++;
+        vTaskDelay(POLL_TIMEOUT_MS);      
     } 
 }
 
@@ -474,12 +528,87 @@ static esp_err_t master_init(void)
     return err;
 }
 
+#ifdef PROVISION_EN
 static void wifi_init_sta(void)
 {
     /* Start Wi-Fi in station mode */
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 }
+#else 
+void wifi_init_sta(void)
+{
+    wifi_event_group = xEventGroupCreate();
+
+    ESP_ERROR_CHECK(esp_netif_init());
+
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    esp_event_handler_instance_t instance_any_id;
+    esp_event_handler_instance_t instance_got_ip;
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_any_id));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_got_ip));
+
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = EXAMPLE_ESP_WIFI_SSID,
+            .password = EXAMPLE_ESP_WIFI_PASS,
+            /* Setting a password implies station will connect to all security modes including WEP/WPA.
+             * However these modes are deprecated and not advisable to be used. Incase your Access point
+             * doesn't support WPA2, these mode can be enabled by commenting below line */
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+        },
+    };
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
+     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+    EventBits_t bits = xEventGroupWaitBits(wifi_event_group,
+                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+                                           pdFALSE,
+                                           pdFALSE,
+                                           portMAX_DELAY);
+
+    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
+     * happened. */
+    if (bits & WIFI_CONNECTED_BIT)
+    {
+        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
+                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+    }
+    else if (bits & WIFI_FAIL_BIT)
+    {
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+    }
+
+    /* The event will not be processed after unregister */
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+    vEventGroupDelete(wifi_event_group);
+}
+
+#endif 
 
 static void get_device_service_name(char *service_name, size_t max)
 {
@@ -769,24 +898,8 @@ void app_main(void)
     esp_log_level_set("TRANSPORT", ESP_LOG_VERBOSE);
     esp_log_level_set("OUTBOX", ESP_LOG_VERBOSE);
 
-    #if 0
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
 
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
-    wifi_init_sta();
-    vTaskDelay(1000);
-    #endif
-
-
+#ifdef PROVISION_EN
     /* Initialize NVS partition */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -810,7 +923,6 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
 
-#if 1
     /* Initialize Wi-Fi including netif with default config */
     esp_netif_create_default_wifi_sta();
 #ifdef CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP
@@ -847,11 +959,9 @@ void app_main(void)
     bool provisioned = false;
 #ifdef CONFIG_EXAMPLE_RESET_PROVISIONED
     wifi_prov_mgr_reset_provisioning();
-#else
+#endif
     /* Let's find out if the device is provisioned */
     // ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
-
-#endif
     /* If device is not yet provisioned start provisioning service */
     if (!provisioned) {
         ESP_LOGI(TAG, "Starting provisioning");
@@ -921,15 +1031,29 @@ void app_main(void)
     }
 
     /* Wait for Wi-Fi connection */
-    xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_EVENT, false, true, portMAX_DELAY);    
+    xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);    
+
+#else 
+    // Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
+    wifi_init_sta();
+    vTaskDelay(1000);
 #endif 
+
+
+
     ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
-
-    // xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
-
-    xTaskCreate(mb_master_operation, "Modbus Master", 4 * 2048, NULL, tskIDLE_PRIORITY, NULL);
-
     
 
     #if 1
@@ -939,7 +1063,7 @@ void app_main(void)
     // initialize the bytebeam client
     bytebeam_init(&bytebeam_client);
 
-    // xTaskCreate(modbus_master_operation, "Modbus Master", 2 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+    xTaskCreate(mb_master_operation, "Modbus Master", 5 * 2048, NULL, tskIDLE_PRIORITY, NULL);
 
     // start the bytebeam client
     bytebeam_start(&bytebeam_client);
