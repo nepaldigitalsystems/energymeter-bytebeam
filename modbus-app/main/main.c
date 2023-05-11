@@ -64,13 +64,11 @@
 
 // #define PROVISION_EN
 
-
 #ifdef PROVISION_EN
-    #define PROV_TRANSPORT_SOFTAP 1
-    #define CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP 1
-    #define CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE 1
-#endif   
-
+#define PROV_TRANSPORT_SOFTAP 1
+#define CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP 1
+#define CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE 1
+#endif
 
 #define EXAMPLE_ESP_WIFI_SSID "nepaldigisys"
 #define EXAMPLE_ESP_WIFI_PASS "NDS_0ffice"
@@ -88,57 +86,54 @@ static EventGroupHandle_t wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
-
-#define CONFIG_FMB_SERIAL_BUF_SIZE  20
+#define CONFIG_FMB_SERIAL_BUF_SIZE 20
 
 #if CONFIG_IDF_TARGET_ESP32
 
-#define CONFIG_MB_UART_RXD      22 
-#define CONFIG_MB_UART_TXD      23
-#define CONFIG_MB_UART_RTS      18 // esp32->18
+#define CONFIG_MB_UART_RXD 22
+#define CONFIG_MB_UART_TXD 23
+#define CONFIG_MB_UART_RTS 18 // esp32->18
 
 #elif CONFIG_IDF_TARGET_ESP32S3
 
-#define CONFIG_MB_UART_RXD      18
-#define CONFIG_MB_UART_TXD      17
-#define CONFIG_MB_UART_RTS      40
+#define CONFIG_MB_UART_RXD 18
+#define CONFIG_MB_UART_TXD 17
+#define CONFIG_MB_UART_RTS 40
 
 #elif CONFIG_IDF_TARGET_ESP32C3
-    
+
 #endif
 
-#define MB_PORT_NUM 2         // Number of UART port used for Modbus connection
-#define MB_DEV_SPEED 19200     // The communication speed of the UART
+#define MB_PORT_NUM 2      // Number of UART port used for Modbus connection
+#define MB_DEV_SPEED 19200 // The communication speed of the UART
 #define CONFIG_FMB_COMM_MODE_RTU_EN 1
-#define MB_DEVICE_ADDR1             1
+#define MB_DEVICE_ADDR1 1
 
 // The number of parameters that intended to be used in the particular control process
 #define MASTER_MAX_CIDS num_device_parameters
 
 // Number of reading of parameters from slave
-#define MASTER_MAX_RETRY 30
+// #define MASTER_MAX_RETRY 30
 
 // Timeout to update cid over Modbus
-#define UPDATE_CIDS_TIMEOUT_MS (500)
-#define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
+// #define UPDATE_CIDS_TIMEOUT_MS (500)
+// #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (10)
+#define POLL_TIMEOUT_MS (20)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
-
 #define STR(fieldname) ((const char *)(fieldname))
+
+// this macro is used to specify the delay for 1 sec.
+#define APP_DELAY_ONE_SEC 4000u
+static int config_publish_period = APP_DELAY_ONE_SEC;
 
 // Options can be used as bit masks or parameter limits
 #define OPTS(min_val, max_val, step_val)                   \
     {                                                      \
         .opt1 = min_val, .opt2 = max_val, .opt3 = step_val \
     }
-
-// this macro is used to specify the delay for 1 sec.
-#define APP_DELAY_ONE_SEC 1000u
-
-static int config_publish_period = APP_DELAY_ONE_SEC;
 
 // static char energymeter_stream[] = "energymeter_stream";
 static char energymeter_stream[] = "nds_test_modbus";
@@ -160,10 +155,10 @@ enum
     CID_MFM384_INP_DATA_I3,
     CID_MFM384_INP_DATA_AVG_I,
     CID_MFM384_INP_DATA_KW,
-    CID_MFM384_INP_DATA_PF_AVG, 
+    CID_MFM384_INP_DATA_PF_AVG,
     CID_MFM384_INP_DATA_FREQUENCY,
     CID_MFM384_INP_DATA_KWH,
-    CID_COUNT
+    CID_COUNT,
 };
 
 typedef struct param_energymeter
@@ -171,124 +166,135 @@ typedef struct param_energymeter
     float voltage_1;
     float voltage_2;
     float voltage_3;
-    float current_avg;
     float current_1;
     float current_2;
     float current_3;
+    float current_avg;
     float total_kw;
+    float avg_pf;
     float frequencey;
     float total_kwh;
-    float avg_pf;
 } param_energymeter_t;
 
-param_energymeter_t energyvals;
+static param_energymeter_t energyvals;
 
 bool flag_new_modbus_data_available = false;
 
 const mb_parameter_descriptor_t device_parameters[] = {
-    // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size, Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
+    // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size,
+    //   Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
     {CID_MFM384_INP_DATA_V_1, STR("Voltage_1"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
     {CID_MFM384_INP_DATA_V_2, STR("Voltage_2"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 2, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
     {CID_MFM384_INP_DATA_V_3, STR("Voltage_3"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 4, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},          
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
     {CID_MFM384_INP_DATA_I1, STR("Current_I1"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 16, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
     {CID_MFM384_INP_DATA_I2, STR("Current_I2"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 18, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
     {CID_MFM384_INP_DATA_I3, STR("Current_I3"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 20, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},  
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
     {CID_MFM384_INP_DATA_AVG_I, STR("Current_avg"), STR("Amps"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 22, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},      
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
     {CID_MFM384_INP_DATA_KW, STR("Kilo_Watt"), STR("KW"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 42, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
-    {CID_MFM384_INP_DATA_PF_AVG, STR("Power Factor"), STR("pf"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 54, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
+    {CID_MFM384_INP_DATA_PF_AVG, STR("Power_Factor"), STR("pf"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 54, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
     {CID_MFM384_INP_DATA_FREQUENCY, STR("Frequency"), STR("Hz"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 56, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER},
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER},
 
-    {CID_MFM384_INP_DATA_KWH, STR("Units"), STR("KWh"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 58, 2,
-     0, PARAM_TYPE_FLOAT, 4, OPTS( 0,0,0 ), PAR_PERMS_READ_WRITE_TRIGGER}
-     
+    {CID_MFM384_INP_DATA_KWH, STR("Kilo_Watt_Hr"), STR("KWh"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 58, 2,
+     0, PARAM_TYPE_FLOAT, 4, OPTS(0, 0, 0), PAR_PERMS_READ_TRIGGER}
+
 };
 
 // Calculate number of parameters in the table
 const uint16_t num_device_parameters = (sizeof(device_parameters) / sizeof(device_parameters[0]));
 
-
 #ifdef PROVISION_EN
 /* Event handler for catching system events */
-static void event_handler(void* arg, esp_event_base_t event_base,
-                          int32_t event_id, void* event_data)
+static void event_handler(void *arg, esp_event_base_t event_base,
+                          int32_t event_id, void *event_data)
 {
 #ifdef CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE
     static int retries;
 #endif
-    if (event_base == WIFI_PROV_EVENT) {
-        switch (event_id) {
-            case WIFI_PROV_START:
-                ESP_LOGI(TAG, "Provisioning started");
-                break;
-            case WIFI_PROV_CRED_RECV: {
-                wifi_sta_config_t *wifi_sta_cfg = (wifi_sta_config_t *)event_data;
-                ESP_LOGI(TAG, "Received Wi-Fi credentials"
-                         "\n\tSSID     : %s\n\tPassword : %s",
-                         (const char *) wifi_sta_cfg->ssid,
-                         (const char *) wifi_sta_cfg->password);
-                break;
-            }
-            case WIFI_PROV_CRED_FAIL: {
-                wifi_prov_sta_fail_reason_t *reason = (wifi_prov_sta_fail_reason_t *)event_data;
-                ESP_LOGE(TAG, "Provisioning failed!\n\tReason : %s"
-                         "\n\tPlease reset to factory and retry provisioning",
-                         (*reason == WIFI_PROV_STA_AUTH_ERROR) ?
-                         "Wi-Fi station authentication failed" : "Wi-Fi access-point not found");
-#ifdef CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE
-                retries++;
-                if (retries >= CONFIG_EXAMPLE_PROV_MGR_MAX_RETRY_CNT) {
-                    ESP_LOGI(TAG, "Failed to connect with provisioned AP, reseting provisioned credentials");
-                    wifi_prov_mgr_reset_sm_state_on_failure();
-                    retries = 0;
-                }
-#endif
-                break;
-            }
-            case WIFI_PROV_CRED_SUCCESS:
-                ESP_LOGI(TAG, "Provisioning successful");
-#ifdef CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE
-                retries = 0;
-#endif
-                break;
-            case WIFI_PROV_END:
-                /* De-initialize manager once provisioning is finished */
-                wifi_prov_mgr_deinit();
-                break;
-            default:
-                break;
+    if (event_base == WIFI_PROV_EVENT)
+    {
+        switch (event_id)
+        {
+        case WIFI_PROV_START:
+            ESP_LOGI(TAG, "Provisioning started");
+            break;
+        case WIFI_PROV_CRED_RECV:
+        {
+            wifi_sta_config_t *wifi_sta_cfg = (wifi_sta_config_t *)event_data;
+            ESP_LOGI(TAG, "Received Wi-Fi credentials"
+                          "\n\tSSID     : %s\n\tPassword : %s",
+                     (const char *)wifi_sta_cfg->ssid,
+                     (const char *)wifi_sta_cfg->password);
+            break;
         }
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        case WIFI_PROV_CRED_FAIL:
+        {
+            wifi_prov_sta_fail_reason_t *reason = (wifi_prov_sta_fail_reason_t *)event_data;
+            ESP_LOGE(TAG, "Provisioning failed!\n\tReason : %s"
+                          "\n\tPlease reset to factory and retry provisioning",
+                     (*reason == WIFI_PROV_STA_AUTH_ERROR) ? "Wi-Fi station authentication failed" : "Wi-Fi access-point not found");
+#ifdef CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE
+            retries++;
+            if (retries >= CONFIG_EXAMPLE_PROV_MGR_MAX_RETRY_CNT)
+            {
+                ESP_LOGI(TAG, "Failed to connect with provisioned AP, reseting provisioned credentials");
+                wifi_prov_mgr_reset_sm_state_on_failure();
+                retries = 0;
+            }
+#endif
+            break;
+        }
+        case WIFI_PROV_CRED_SUCCESS:
+            ESP_LOGI(TAG, "Provisioning successful");
+#ifdef CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE
+            retries = 0;
+#endif
+            break;
+        case WIFI_PROV_END:
+            /* De-initialize manager once provisioning is finished */
+            wifi_prov_mgr_deinit();
+            break;
+        default:
+            break;
+        }
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    {
         esp_wifi_connect();
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+    }
+    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Connected with IP Address:" IPSTR, IP2STR(&event->ip_info.ip));
         /* Signal main application to continue execution */
         // s_retry_num = 0;
         retries = 0;
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
         ESP_LOGI(TAG, "Disconnected. Connecting to the AP again...");
         retries++;
-        if (retries >= CONFIG_EXAMPLE_PROV_MGR_MAX_RETRY_CNT) {
+        if (retries >= CONFIG_EXAMPLE_PROV_MGR_MAX_RETRY_CNT)
+        {
             ESP_LOGI(TAG, "Failed to connect with provisioned AP, reseting provisioned credentials");
             wifi_prov_mgr_reset_provisioning();
             wifi_prov_mgr_reset_sm_state_on_failure();
@@ -336,25 +342,26 @@ static void event_handler(void *arg, esp_event_base_t event_base,
  * Applications can choose to use other formats like protobuf, JSON, XML, etc.
  */
 esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ssize_t inlen,
-                                          uint8_t **outbuf, ssize_t *outlen, void *priv_data)
+                                   uint8_t **outbuf, ssize_t *outlen, void *priv_data)
 {
-    if (inbuf) {
+    if (inbuf)
+    {
         ESP_LOGI(TAG, "Received data: %.*s", inlen, (char *)inbuf);
     }
     char response[] = "SUCCESS";
     *outbuf = (uint8_t *)strdup(response);
-    if (*outbuf == NULL) {
+    if (*outbuf == NULL)
+    {
         ESP_LOGE(TAG, "System out of memory");
         return ESP_ERR_NO_MEM;
     }
     *outlen = strlen(response) + 1; /* +1 for NULL terminating byte */
-
     return ESP_OK;
 }
 
-// static esp_err_t mb_master_read(uint8_t cid, float * d) {
-
-//     const mb_parameter_descriptor_t* param_descriptor = NULL;    
+// static esp_err_t mb_master_read(uint8_t cid, float * d)
+// {
+//     const mb_parameter_descriptor_t* param_descriptor = NULL;
 //     uint8_t type = 0;
 //     uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
 //     esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
@@ -365,9 +372,9 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
 //                                 param_descriptor->cid,
 //                                 type,
 //                                 (char*)param_descriptor->param_key,
-//                                 (char*)param_descriptor->param_units,                                        
+//                                 (char*)param_descriptor->param_units,
 //                                 *(float*)temp_data);
-//                                 *d = *(float*)temp_data;                            
+//                                 *d = *(float*)temp_data;
 //         } else {
 //             ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
 //                             param_descriptor->cid,
@@ -382,86 +389,97 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
 //     return err;
 // }
 
-static void mb_master_operation(void *arg) {
-    const mb_parameter_descriptor_t* param_descriptor = NULL;    
+static void app_start(bytebeam_client_t *);
+
+static void mb_master_operation(void *arg)
+{
+    const mb_parameter_descriptor_t *param_descriptor = NULL;
     uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
     uint8_t type = 0;
-
-    while(1) {        
-        static uint8_t cid = 0;
+    while (1)
+    {
+        static uint16_t cid = 0;
         float data_val = 0.0;
-
-        if(cid >= CID_COUNT)   cid = 0;
-
+        // Get data from parameters description table
+        // and use this information to fill the characteristics description table
+        // and having all required fields in just one table
+        if (cid >= CID_COUNT) // 0-10
+        {
+            cid = 0;
+        }
         esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
-
-        if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
-
-            esp_err_t err_get_param = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
-
-
-            if (err_get_param == ESP_OK) {
+        if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL))
+        {
+            esp_err_t err_get_param = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key, (uint8_t *)temp_data, &type);
+            if (err_get_param == ESP_OK)
+            {
                 ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
-                                    param_descriptor->cid,
-                                    type,
-                                    (char*)param_descriptor->param_key,
-                                    (char*)param_descriptor->param_units,                                        
-                                    *(float*)temp_data);
+                         param_descriptor->cid,
+                         type,
+                         (char *)param_descriptor->param_key,
+                         (char *)param_descriptor->param_units,
+                         *(float *)temp_data);
 
-                                    data_val = *(float*)temp_data;    
+                data_val = *(float *)temp_data;
+                switch (param_descriptor->cid)
+                {
+                case CID_MFM384_INP_DATA_V_1:
+                    energyvals.voltage_1 = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_V_2:
+                    energyvals.voltage_2 = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_V_3:
+                    energyvals.voltage_3 = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_I1:
+                    energyvals.current_1 = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_I2:
+                    energyvals.current_2 = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_I3:
+                    energyvals.current_3 = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_AVG_I:
+                    energyvals.current_avg = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_KW:
+                    energyvals.total_kw = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_PF_AVG:
+                    energyvals.avg_pf = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_FREQUENCY:
+                    energyvals.frequencey = data_val;
+                    break;
+                case CID_MFM384_INP_DATA_KWH:
+                    energyvals.total_kwh = data_val;
+                    break;
 
-                                    switch (param_descriptor->cid)
-                                    {
-                                    case CID_MFM384_INP_DATA_V_1:  
-                                        energyvals.voltage_1 = data_val;        
-                                        break;
-                                    case CID_MFM384_INP_DATA_V_2:
-                                        energyvals.voltage_2 = data_val;  
-                                        break;  
-                                    case CID_MFM384_INP_DATA_V_3:
-                                        energyvals.voltage_3 = data_val;    
-                                        break; 
-                                    case CID_MFM384_INP_DATA_I1:
-                                        energyvals.current_1 = data_val;
-                                        break;
-                                    case CID_MFM384_INP_DATA_I2:
-                                        energyvals.current_2 = data_val;  
-                                        break;           
-                                    case CID_MFM384_INP_DATA_I3:
-                                        energyvals.current_3 = data_val;  
-                                        break;      
-                                    case CID_MFM384_INP_DATA_AVG_I:
-                                        energyvals.current_avg = data_val;
-                                        break;  
-                                    case CID_MFM384_INP_DATA_KW:
-                                        energyvals.total_kw = data_val;    
-                                        break;        
-                                        case CID_MFM384_INP_DATA_PF_AVG:
-                                        energyvals.avg_pf = data_val;    
-                                        break;                                                                                              
-                                    case CID_MFM384_INP_DATA_FREQUENCY:
-                                        energyvals.frequencey = data_val;    
-                                        break;
-                                    case CID_MFM384_INP_DATA_KWH:
-                                        energyvals.total_kwh = data_val;
-                                        break;                   
-                                    }                                                            
-            } else {
-                ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s).",
-                                param_descriptor->cid,
-                                type,
-                                (char*)param_descriptor->param_key,
-                                (int)err_get_param,
-                                (char*)esp_err_to_name(err_get_param));
-                                continue;
+                default:
+                    break;
+                }
             }
-        } else {
+            else
+            {
+                ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s). value = (%f) ",
+                         param_descriptor->cid,
+                         type,
+                         (char *)param_descriptor->param_key,
+                         (int)err_get_param,
+                         (char *)esp_err_to_name(err_get_param),
+                         *(float *)temp_data);
+            }
+        }
+        else
+        {
             ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
-        }  
+        }
 
         cid++;
-        vTaskDelay(POLL_TIMEOUT_MS);      
-    } 
+        vTaskDelay(POLL_TIMEOUT_TICS);
+    }
 }
 
 // Modbus master initialization
@@ -523,7 +541,7 @@ static void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 }
-#else 
+#else
 void wifi_init_sta(void)
 {
     wifi_event_group = xEventGroupCreate();
@@ -596,7 +614,7 @@ void wifi_init_sta(void)
     vEventGroupDelete(wifi_event_group);
 }
 
-#endif 
+#endif
 
 static void get_device_service_name(char *service_name, size_t max)
 {
@@ -624,24 +642,21 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     cJSON *current_1_json = NULL;
     cJSON *current_2_json = NULL;
     cJSON *current_3_json = NULL;
-    cJSON *current_avg_json  = NULL;
+    cJSON *current_avg_json = NULL;
     cJSON *totalkw_json = NULL;
-    cJSON *totalkwh_json = NULL;
+    cJSON *avg_pf_json = NULL;
     cJSON *frequency_json = NULL;
-    cJSON *avg_pf_json = NULL;    
+    cJSON *totalkwh_json = NULL;
 
     char *string_json = NULL;
 
     device_shadow_json_list = cJSON_CreateArray();
-
     if (device_shadow_json_list == NULL)
     {
         ESP_LOGE(TAG, "Json Init failed.");
         return -1;
     }
-
     device_shadow_json = cJSON_CreateObject();
-
     if (device_shadow_json == NULL)
     {
         ESP_LOGE(TAG, "Json add failed.");
@@ -652,16 +667,13 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     // get current time
     gettimeofday(&te, NULL);
     milliseconds = te.tv_sec * 1000LL + te.tv_usec / 1000;
-
     timestamp_json = cJSON_CreateNumber(milliseconds);
-
     if (timestamp_json == NULL)
     {
         ESP_LOGE(TAG, "Json add time stamp failed.");
         cJSON_Delete(device_shadow_json_list);
         return -1;
     }
-
     cJSON_AddItemToObject(device_shadow_json, "timestamp", timestamp_json);
 
     sequence++;
@@ -735,7 +747,7 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
         return -1;
     }
     cJSON_AddItemToObject(device_shadow_json, "current_3", current_3_json);
-    
+
     // Add Avg I
     current_avg_json = cJSON_CreateNumber(energyvals.current_avg);
     if (current_avg_json == NULL)
@@ -745,46 +757,19 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
         return -1;
     }
     cJSON_AddItemToObject(device_shadow_json, "avg_current", current_avg_json);
-            
+
     // Add total KW
     totalkw_json = cJSON_CreateNumber(energyvals.total_kw);
-
     if (totalkw_json == NULL)
     {
         ESP_LOGE(TAG, "Json add KW failed.");
         cJSON_Delete(device_shadow_json_list);
         return -1;
     }
-
     cJSON_AddItemToObject(device_shadow_json, "totalkw", totalkw_json);
-
-    // Add total KWh
-    totalkwh_json = cJSON_CreateNumber(energyvals.total_kwh);
-
-    if (totalkwh_json == NULL)
-    {
-        ESP_LOGE(TAG, "Json add KWh failed.");
-        cJSON_Delete(device_shadow_json_list);
-        return -1;
-    }
-
-    cJSON_AddItemToObject(device_shadow_json, "totalkwh", totalkwh_json);
-
-    // Add frequency
-    frequency_json = cJSON_CreateNumber(energyvals.frequencey);
-
-    if (frequency_json == NULL)
-    {
-        ESP_LOGE(TAG, "Json add frequency failed.");
-        cJSON_Delete(device_shadow_json_list);
-        return -1;
-    }
-
-    cJSON_AddItemToObject(device_shadow_json, "frequency", frequency_json);
 
     // Add pf
     avg_pf_json = cJSON_CreateNumber(energyvals.avg_pf);
-
     if (avg_pf_json == NULL)
     {
         ESP_LOGE(TAG, "Json add power factor failed.");
@@ -793,12 +778,29 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
     }
     cJSON_AddItemToObject(device_shadow_json, "avg_pf", avg_pf_json);
 
+    // Add frequency
+    frequency_json = cJSON_CreateNumber(energyvals.frequencey);
+    if (frequency_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add frequency failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+    cJSON_AddItemToObject(device_shadow_json, "frequency", frequency_json);
 
-    
+    // Add total KWh
+    totalkwh_json = cJSON_CreateNumber(energyvals.total_kwh);
+    if (totalkwh_json == NULL)
+    {
+        ESP_LOGE(TAG, "Json add KWh failed.");
+        cJSON_Delete(device_shadow_json_list);
+        return -1;
+    }
+    cJSON_AddItemToObject(device_shadow_json, "totalkwh", totalkwh_json);
+
     cJSON_AddItemToArray(device_shadow_json_list, device_shadow_json);
 
     string_json = cJSON_Print(device_shadow_json_list);
-
     if (string_json == NULL)
     {
         ESP_LOGE(TAG, "Json string print failed.");
@@ -819,18 +821,17 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
 static void app_start(bytebeam_client_t *bytebeam_client)
 {
     int ret_val = 0;
-
     while (1)
     {
         // publish sht values
-        ret_val = publish_energymeter_values(bytebeam_client);
 
+        ret_val = publish_energymeter_values(bytebeam_client);
         if (ret_val != 0)
         {
             ESP_LOGE(TAG, "Failed to publish energymeter values.");
         }
 
-        vTaskDelay(config_publish_period / portTICK_PERIOD_MS);
+        vTaskDelay(config_publish_period / portTICK_PERIOD_MS); // 1 sec
     }
 }
 
@@ -886,11 +887,11 @@ void app_main(void)
     esp_log_level_set("TRANSPORT", ESP_LOG_VERBOSE);
     esp_log_level_set("OUTBOX", ESP_LOG_VERBOSE);
 
-
 #ifdef PROVISION_EN
     /* Initialize NVS partition */
     esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
         /* NVS partition was truncated
          * and needs to be erased */
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -921,20 +922,20 @@ void app_main(void)
 
     /* Configuration for the provisioning manager */
     wifi_prov_mgr_config_t config = {
-        /* What is the Provisioning Scheme that we want ?
-         * wifi_prov_scheme_softap or wifi_prov_scheme_ble */
+    /* What is the Provisioning Scheme that we want ?
+     * wifi_prov_scheme_softap or wifi_prov_scheme_ble */
 #ifdef CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP
         .scheme = wifi_prov_scheme_softap,
 #endif /* CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP */
 
-        /* Any default scheme specific event handler that you would
-         * like to choose. Since our example application requires
-         * neither BT nor BLE, we can choose to release the associated
-         * memory once provisioning is complete, or not needed
-         * (in case when device is already provisioned). Choosing
-         * appropriate scheme specific event handler allows the manager
-         * to take care of this automatically. This can be set to
-         * WIFI_PROV_EVENT_HANDLER_NONE when using wifi_prov_scheme_softap*/
+    /* Any default scheme specific event handler that you would
+     * like to choose. Since our example application requires
+     * neither BT nor BLE, we can choose to release the associated
+     * memory once provisioning is complete, or not needed
+     * (in case when device is already provisioned). Choosing
+     * appropriate scheme specific event handler allows the manager
+     * to take care of this automatically. This can be set to
+     * WIFI_PROV_EVENT_HANDLER_NONE when using wifi_prov_scheme_softap*/
 #ifdef CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP
         .scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE
 #endif /* CONFIG_EXAMPLE_PROV_TRANSPORT_SOFTAP */
@@ -951,7 +952,8 @@ void app_main(void)
     /* Let's find out if the device is provisioned */
     // ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
     /* If device is not yet provisioned start provisioning service */
-    if (!provisioned) {
+    if (!provisioned)
+    {
         ESP_LOGI(TAG, "Starting provisioning");
 
         /* What is the Device Service Name that we want
@@ -1006,8 +1008,9 @@ void app_main(void)
         // wifi_prov_mgr_deinit();
         /* Print QR code for provisioning */
         // wifi_prov_print_qr(service_name, pop, PROV_TRANSPORT_SOFTAP);
-
-    } else {
+    }
+    else
+    {
         ESP_LOGI(TAG, "Already provisioned, starting Wi-Fi STA");
 
         /* We don't need the manager as device is already provisioned,
@@ -1019,9 +1022,9 @@ void app_main(void)
     }
 
     /* Wait for Wi-Fi connection */
-    xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);    
+    xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
 
-#else 
+#else
     // Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
@@ -1036,29 +1039,26 @@ void app_main(void)
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
     vTaskDelay(1000);
-#endif 
-
-
+#endif
 
     ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
-    
 
-    #if 1
+#if 1
     // sync time from the ntp
     sync_time_from_ntp();
 
     // initialize the bytebeam client
     bytebeam_init(&bytebeam_client);
 
-    xTaskCreate(mb_master_operation, "Modbus Master", 5 * 2048, NULL, tskIDLE_PRIORITY, NULL);
-
     // start the bytebeam client
     bytebeam_start(&bytebeam_client);
+
+    xTaskCreate(mb_master_operation, "Modbus Master", 5 * 2048, NULL, 5, NULL);
 
     //
     // start the main application
     //
     app_start(&bytebeam_client);
-    #endif
+#endif
 }
