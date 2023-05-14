@@ -92,7 +92,7 @@ static EventGroupHandle_t wifi_event_group;
 
 #define CONFIG_MB_UART_RXD 22
 #define CONFIG_MB_UART_TXD 23
-#define CONFIG_MB_UART_RTS 18 // esp32->18
+#define CONFIG_MB_UART_RTS 18
 
 #elif CONFIG_IDF_TARGET_ESP32S3
 
@@ -120,13 +120,13 @@ static EventGroupHandle_t wifi_event_group;
 // #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (20)
+#define POLL_TIMEOUT_MS (10)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 #define STR(fieldname) ((const char *)(fieldname))
 
 // this macro is used to specify the delay for 1 sec.
-#define APP_DELAY_ONE_SEC 4000u
+#define APP_DELAY_ONE_SEC 4500u
 static int config_publish_period = APP_DELAY_ONE_SEC;
 
 // Options can be used as bit masks or parameter limits
@@ -389,8 +389,6 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
 //     return err;
 // }
 
-static void app_start(bytebeam_client_t *);
-
 static void mb_master_operation(void *arg)
 {
     const mb_parameter_descriptor_t *param_descriptor = NULL;
@@ -410,6 +408,10 @@ static void mb_master_operation(void *arg)
         esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
         if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL))
         {
+            temp_data[0] = 0;
+            temp_data[1] = 0;
+            temp_data[2] = 0;
+            temp_data[3] = 0;
             esp_err_t err_get_param = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key, (uint8_t *)temp_data, &type);
             if (err_get_param == ESP_OK)
             {
@@ -456,19 +458,19 @@ static void mb_master_operation(void *arg)
                 case CID_MFM384_INP_DATA_KWH:
                     energyvals.total_kwh = data_val;
                     break;
-
                 default:
                     break;
                 }
             }
             else
             {
-                ESP_LOGE(TAG, "Characteristic #%d Type : %d (%s) read fail, err = 0x%x (%s). value = (%f) ",
+                ESP_LOGE(TAG, "Characteristic #%d Type : %d (Key: %s) read fail, err = 0x%x (%s). Register_start = (%d) value = (%f) ",
                          param_descriptor->cid,
                          type,
                          (char *)param_descriptor->param_key,
                          (int)err_get_param,
                          (char *)esp_err_to_name(err_get_param),
+                         param_descriptor->mb_reg_start,
                          *(float *)temp_data);
             }
         }
@@ -476,10 +478,10 @@ static void mb_master_operation(void *arg)
         {
             ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
         }
-
         cid++;
         vTaskDelay(POLL_TIMEOUT_TICS);
     }
+    vTaskDelete(NULL);
 }
 
 // Modbus master initialization
@@ -613,7 +615,6 @@ void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
     vEventGroupDelete(wifi_event_group);
 }
-
 #endif
 
 static void get_device_service_name(char *service_name, size_t max)
@@ -824,7 +825,6 @@ static void app_start(bytebeam_client_t *bytebeam_client)
     while (1)
     {
         // publish sht values
-
         ret_val = publish_energymeter_values(bytebeam_client);
         if (ret_val != 0)
         {

@@ -384,7 +384,8 @@ eMBMasterPoll( void )
                         ESP_LOGD( MB_PORT_TAG, "%s: Packet data receive failed (addr=%u)(%u).",
                                                __func__, ucRcvAddress, eStatus);
                     }
-                } else {
+                }
+                 else {
                     // Ignore the `EV_MASTER_FRAME_RECEIVED` event because the respond timeout occurred
                     // and this is likely respond to previous transaction
                     ESP_LOGE( MB_PORT_TAG, "Drop data received outside of transaction.");

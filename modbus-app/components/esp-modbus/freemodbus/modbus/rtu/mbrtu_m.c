@@ -53,51 +53,51 @@
 #include "mbport.h"
 
 /* ----------------------- Defines ------------------------------------------*/
-#define MB_RTU_SER_PDU_SIZE_MIN 4   /*!< Minimum size of a Modbus RTU frame. */
+#define MB_RTU_SER_PDU_SIZE_MIN 4 /*!< Minimum size of a Modbus RTU frame. */
 
 /* ----------------------- Type definitions ---------------------------------*/
 typedef enum
 {
-    STATE_M_RX_INIT,              /*!< Receiver is in initial state. */
-    STATE_M_RX_IDLE,              /*!< Receiver is in idle state. */
-    STATE_M_RX_RCV,               /*!< Frame is beeing received. */
-    STATE_M_RX_ERROR,             /*!< If the frame is invalid. */
+    STATE_M_RX_INIT,  /*!< Receiver is in initial state. */
+    STATE_M_RX_IDLE,  /*!< Receiver is in idle state. */
+    STATE_M_RX_RCV,   /*!< Frame is beeing received. */
+    STATE_M_RX_ERROR, /*!< If the frame is invalid. */
 } eMBMasterRcvState;
 
 typedef enum
 {
-    STATE_M_TX_IDLE,              /*!< Transmitter is in idle state. */
-    STATE_M_TX_XMIT,              /*!< Transmitter is in transfer state. */
-    STATE_M_TX_XFWR,              /*!< Transmitter is in transfer finish and wait receive state. */
+    STATE_M_TX_IDLE, /*!< Transmitter is in idle state. */
+    STATE_M_TX_XMIT, /*!< Transmitter is in transfer state. */
+    STATE_M_TX_XFWR, /*!< Transmitter is in transfer finish and wait receive state. */
 } eMBMasterSndState;
 
 #if MB_MASTER_RTU_ENABLED > 0
 /*------------------------ Shared variables ---------------------------------*/
-extern volatile UCHAR   ucMasterRcvBuf[];
-extern volatile UCHAR   ucMasterSndBuf[];
+extern volatile UCHAR ucMasterRcvBuf[];
+extern volatile UCHAR ucMasterSndBuf[];
 
 /* ----------------------- Static variables ---------------------------------*/
-static volatile eMBMasterSndState   eSndState;
-static volatile eMBMasterRcvState   eRcvState;
+static volatile eMBMasterSndState eSndState;
+static volatile eMBMasterRcvState eRcvState;
 
-static volatile UCHAR   *pucMasterSndBufferCur;
-static volatile USHORT  usMasterSndBufferCount;
-static volatile USHORT  usMasterRcvBufferPos;
+static volatile UCHAR *pucMasterSndBufferCur;
+static volatile USHORT usMasterSndBufferCount;
+static volatile USHORT usMasterRcvBufferPos;
 
 static volatile UCHAR *ucMasterRTURcvBuf = ucMasterRcvBuf;
 static volatile UCHAR *ucMasterRTUSndBuf = ucMasterSndBuf;
 
 /* ----------------------- Start implementation -----------------------------*/
 eMBErrorCode
-eMBMasterRTUInit(UCHAR ucPort, ULONG ulBaudRate, eMBParity eParity )
+eMBMasterRTUInit(UCHAR ucPort, ULONG ulBaudRate, eMBParity eParity)
 {
-    eMBErrorCode    eStatus = MB_ENOERR;
-    ULONG           usTimerT35_50us;
+    eMBErrorCode eStatus = MB_ENOERR;
+    ULONG usTimerT35_50us;
 
-    ENTER_CRITICAL_SECTION(  );
+    ENTER_CRITICAL_SECTION();
 
     /* Modbus RTU uses 8 Databits. */
-    if( xMBMasterPortSerialInit( ucPort, ulBaudRate, 8, eParity ) != TRUE )
+    if (xMBMasterPortSerialInit(ucPort, ulBaudRate, 8, eParity) != TRUE)
     {
         eStatus = MB_EPORTERR;
     }
@@ -106,9 +106,9 @@ eMBMasterRTUInit(UCHAR ucPort, ULONG ulBaudRate, eMBParity eParity )
         /* If baudrate > 19200 then we should use the fixed timer values
          * t35 = 1750us. Otherwise t35 must be 3.5 times the character time.
          */
-        if( ulBaudRate > 19200 )
+        if (ulBaudRate > 19200)
         {
-            usTimerT35_50us = 35;       /* 1800us. */
+            usTimerT35_50us = 35; /* 1800us. */
         }
         else
         {
@@ -120,62 +120,59 @@ eMBMasterRTUInit(UCHAR ucPort, ULONG ulBaudRate, eMBParity eParity )
              * The reload for t3.5 is 1.5 times this value and similary
              * for t3.5.
              */
-            usTimerT35_50us = ( 7UL * 220000UL ) / ( 2UL * ulBaudRate );
+            usTimerT35_50us = (7UL * 220000UL) / (2UL * ulBaudRate);
         }
-        if( xMBMasterPortTimersInit( ( USHORT ) usTimerT35_50us ) != TRUE )
+        if (xMBMasterPortTimersInit((USHORT)usTimerT35_50us) != TRUE)
         {
             eStatus = MB_EPORTERR;
         }
     }
-    EXIT_CRITICAL_SECTION(  );
+    EXIT_CRITICAL_SECTION();
 
     return eStatus;
 }
 
-void
-eMBMasterRTUStart( void )
+void eMBMasterRTUStart(void)
 {
-    ENTER_CRITICAL_SECTION(  );
+    ENTER_CRITICAL_SECTION();
     /* Initially the receiver is in the state STATE_M_RX_INIT. we start
      * the timer and if no character is received within t3.5 we change
      * to STATE_M_RX_IDLE. This makes sure that we delay startup of the
      * modbus protocol stack until the bus is free.
      */
     eRcvState = STATE_M_RX_INIT;
-    vMBMasterPortSerialEnable( TRUE, FALSE );
-    vMBMasterPortTimersT35Enable(  );
+    vMBMasterPortSerialEnable(TRUE, FALSE);
+    vMBMasterPortTimersT35Enable();
 
-    EXIT_CRITICAL_SECTION(  );
+    EXIT_CRITICAL_SECTION();
 }
 
-void
-eMBMasterRTUStop( void )
+void eMBMasterRTUStop(void)
 {
-    ENTER_CRITICAL_SECTION(  );
-    vMBMasterPortSerialEnable( FALSE, FALSE );
-    vMBMasterPortTimersDisable(  );
-    EXIT_CRITICAL_SECTION(  );
+    ENTER_CRITICAL_SECTION();
+    vMBMasterPortSerialEnable(FALSE, FALSE);
+    vMBMasterPortTimersDisable();
+    EXIT_CRITICAL_SECTION();
 }
 
 eMBErrorCode
-eMBMasterRTUReceive( UCHAR * pucRcvAddress, UCHAR ** pucFrame, USHORT * pusLength )
+eMBMasterRTUReceive(UCHAR *pucRcvAddress, UCHAR **pucFrame, USHORT *pusLength)
 {
-    eMBErrorCode    eStatus = MB_ENOERR;
-    UCHAR          *pucMBRTUFrame = ( UCHAR* ) ucMasterRTURcvBuf;
-    USHORT          usFrameLength = usMasterRcvBufferPos;
+    eMBErrorCode eStatus = MB_ENOERR;
+    UCHAR *pucMBRTUFrame = (UCHAR *)ucMasterRTURcvBuf;
+    USHORT usFrameLength = usMasterRcvBufferPos;
 
-    if( xMBMasterPortSerialGetResponse( &pucMBRTUFrame, &usFrameLength ) == FALSE )
+    if (xMBMasterPortSerialGetResponse(&pucMBRTUFrame, &usFrameLength) == FALSE)
     {
         return MB_EIO;
     }
 
-    ENTER_CRITICAL_SECTION(  );
-    assert( usFrameLength < MB_SER_PDU_SIZE_MAX );
-    assert( pucMBRTUFrame );
+    ENTER_CRITICAL_SECTION();
+    assert(usFrameLength < MB_SER_PDU_SIZE_MAX);
+    assert(pucMBRTUFrame);
 
     /* Length and CRC check */
-    if( ( usFrameLength >= MB_RTU_SER_PDU_SIZE_MIN )
-        && ( usMBCRC16( ( UCHAR * ) pucMBRTUFrame, usFrameLength ) == 0 ) )
+    if ((usFrameLength >= MB_RTU_SER_PDU_SIZE_MIN) && (usMBCRC16((UCHAR *)pucMBRTUFrame, usFrameLength) == 0))
     {
         /* Save the address field. All frames are passed to the upper layer
          * and the decision if a frame is used is done there.
@@ -185,37 +182,38 @@ eMBMasterRTUReceive( UCHAR * pucRcvAddress, UCHAR ** pucFrame, USHORT * pusLengt
         /* Total length of Modbus-PDU is Modbus-Serial-Line-PDU minus
          * size of address field and CRC checksum.
          */
-        *pusLength = ( USHORT )( usFrameLength - MB_SER_PDU_PDU_OFF - MB_SER_PDU_SIZE_CRC );
+        *pusLength = (USHORT)(usFrameLength - MB_SER_PDU_PDU_OFF - MB_SER_PDU_SIZE_CRC);
 
         /* Return the start of the Modbus PDU to the caller. */
-        *pucFrame = ( UCHAR * ) & pucMBRTUFrame[MB_SER_PDU_PDU_OFF];
+        *pucFrame = (UCHAR *)&pucMBRTUFrame[MB_SER_PDU_PDU_OFF];
     }
     else
     {
         eStatus = MB_EIO;
     }
 
-    EXIT_CRITICAL_SECTION(  );
+    EXIT_CRITICAL_SECTION();
     return eStatus;
 }
 
 eMBErrorCode
-eMBMasterRTUSend( UCHAR ucSlaveAddress, const UCHAR * pucFrame, USHORT usLength )
+eMBMasterRTUSend(UCHAR ucSlaveAddress, const UCHAR *pucFrame, USHORT usLength)
 {
-    eMBErrorCode    eStatus = MB_ENOERR;
-    USHORT          usCRC16;
+    eMBErrorCode eStatus = MB_ENOERR;
+    USHORT usCRC16;
 
-    if ( ucSlaveAddress > MB_MASTER_TOTAL_SLAVE_NUM ) return MB_EINVAL;
+    if (ucSlaveAddress > MB_MASTER_TOTAL_SLAVE_NUM)
+        return MB_EINVAL;
 
     /* Check if the receiver is still in idle state. If not we where to
      * slow with processing the received frame and the master sent another
      * frame on the network. We have to abort sending the frame.
      */
-    if( eRcvState == STATE_M_RX_IDLE )
+    if (eRcvState == STATE_M_RX_IDLE)
     {
-        ENTER_CRITICAL_SECTION(  );
+        ENTER_CRITICAL_SECTION();
         /* First byte before the Modbus-PDU is the slave address. */
-        pucMasterSndBufferCur = ( UCHAR * ) pucFrame - 1;
+        pucMasterSndBufferCur = (UCHAR *)pucFrame - 1;
         usMasterSndBufferCount = 1;
 
         /* Now copy the Modbus-PDU into the Modbus-Serial-Line-PDU. */
@@ -223,21 +221,21 @@ eMBMasterRTUSend( UCHAR ucSlaveAddress, const UCHAR * pucFrame, USHORT usLength 
         usMasterSndBufferCount += usLength;
 
         /* Calculate CRC16 checksum for Modbus-Serial-Line-PDU. */
-        usCRC16 = usMBCRC16( ( UCHAR * ) pucMasterSndBufferCur, usMasterSndBufferCount );
-        pucMasterSndBufferCur[usMasterSndBufferCount++] = ( UCHAR )( usCRC16 & 0xFF );
-        pucMasterSndBufferCur[usMasterSndBufferCount++] = ( UCHAR )( usCRC16 >> 8 );
-        EXIT_CRITICAL_SECTION(  );
+        usCRC16 = usMBCRC16((UCHAR *)pucMasterSndBufferCur, usMasterSndBufferCount);
+        pucMasterSndBufferCur[usMasterSndBufferCount++] = (UCHAR)(usCRC16 & 0xFF);
+        pucMasterSndBufferCur[usMasterSndBufferCount++] = (UCHAR)(usCRC16 >> 8);
+        EXIT_CRITICAL_SECTION();
 
         /* Activate the transmitter. */
         eSndState = STATE_M_TX_XMIT;
 
-        if ( xMBMasterPortSerialSendRequest( ( UCHAR * ) pucMasterSndBufferCur, usMasterSndBufferCount ) == FALSE )
+        if (xMBMasterPortSerialSendRequest((UCHAR *)pucMasterSndBufferCur, usMasterSndBufferCount) == FALSE)
         {
             eStatus = MB_EIO;
         }
 
         // The place to enable RS485 driver
-        vMBMasterPortSerialEnable( FALSE, TRUE );
+        vMBMasterPortSerialEnable(FALSE, TRUE);
     }
     else
     {
@@ -246,24 +244,23 @@ eMBMasterRTUSend( UCHAR ucSlaveAddress, const UCHAR * pucFrame, USHORT usLength 
     return eStatus;
 }
 
-BOOL
-xMBMasterRTUReceiveFSM( void )
+BOOL xMBMasterRTUReceiveFSM(void)
 {
-    BOOL            xStatus = FALSE;
-    UCHAR           ucByte;
+    BOOL xStatus = FALSE;
+    UCHAR ucByte;
 
-    assert(( eSndState == STATE_M_TX_IDLE ) || ( eSndState == STATE_M_TX_XFWR ));
+    assert((eSndState == STATE_M_TX_IDLE) || (eSndState == STATE_M_TX_XFWR));
 
     /* Always read the character. */
-    xStatus = xMBMasterPortSerialGetByte( ( CHAR * ) & ucByte );
+    xStatus = xMBMasterPortSerialGetByte((CHAR *)&ucByte);
 
-    switch ( eRcvState )
+    switch (eRcvState)
     {
         /* If we have received a character in the init state we have to
          * wait until the frame is finished.
          */
     case STATE_M_RX_INIT:
-        vMBMasterPortTimersT35Enable( );
+        vMBMasterPortTimersT35Enable();
         ESP_LOGD("DBG", "Start initialization phase.");
         break;
 
@@ -271,7 +268,7 @@ xMBMasterRTUReceiveFSM( void )
          * damaged frame are transmitted.
          */
     case STATE_M_RX_ERROR:
-        vMBMasterPortTimersT35Enable( );
+        vMBMasterPortTimersT35Enable();
         break;
 
         /* In the idle state we wait for a new character. If a character
@@ -283,18 +280,19 @@ xMBMasterRTUReceiveFSM( void )
         /* In time of respond timeout,the receiver receive a frame.
          * Disable timer of respond timeout and change the transmiter state to idle.
          */
-        vMBMasterPortTimersDisable( );
+        vMBMasterPortTimersDisable();
         eSndState = STATE_M_TX_IDLE;
 
         usMasterRcvBufferPos = 0;
-        if( xStatus && ucByte ) {
+        if (xStatus && ucByte)
+        {
             ucMasterRTURcvBuf[usMasterRcvBufferPos++] = ucByte;
             eRcvState = STATE_M_RX_RCV;
         }
 
         /* Enable t3.5 timers. */
 #if CONFIG_FMB_TIMER_PORT_ENABLED
-        vMBMasterPortTimersT35Enable( );
+        vMBMasterPortTimersT35Enable();
 #endif
         break;
 
@@ -304,9 +302,10 @@ xMBMasterRTUReceiveFSM( void )
          * ignored.
          */
     case STATE_M_RX_RCV:
-        if( usMasterRcvBufferPos < MB_SER_PDU_SIZE_MAX )
+        if (usMasterRcvBufferPos < MB_SER_PDU_SIZE_MAX)
         {
-            if ( xStatus ) {
+            if (xStatus)
+            {
                 ucMasterRTURcvBuf[usMasterRcvBufferPos++] = ucByte;
             }
         }
@@ -315,22 +314,21 @@ xMBMasterRTUReceiveFSM( void )
             eRcvState = STATE_M_RX_ERROR;
         }
 #if CONFIG_FMB_TIMER_PORT_ENABLED
-        vMBMasterPortTimersT35Enable( );
+        vMBMasterPortTimersT35Enable();
 #endif
         break;
     }
     return xStatus;
 }
 
-BOOL
-xMBMasterRTUTransmitFSM( void )
+BOOL xMBMasterRTUTransmitFSM(void)
 {
     BOOL xNeedPoll = TRUE;
     BOOL xFrameIsBroadcast = FALSE;
 
-    assert( eRcvState == STATE_M_RX_IDLE );
+    assert(eRcvState == STATE_M_RX_IDLE);
 
-    switch ( eSndState )
+    switch (eSndState)
     {
         /* We should not get a transmitter event if the transmitter is in
          * idle state.  */
@@ -343,27 +341,26 @@ xMBMasterRTUTransmitFSM( void )
 
     case STATE_M_TX_XMIT:
         /* check if we are finished. */
-        if( usMasterSndBufferCount != 0 )
+        if (usMasterSndBufferCount != 0)
         {
-            xMBMasterPortSerialPutByte( ( CHAR )*pucMasterSndBufferCur );
-            pucMasterSndBufferCur++;  /* next byte in sendbuffer. */
+            xMBMasterPortSerialPutByte((CHAR)*pucMasterSndBufferCur);
+            pucMasterSndBufferCur++; /* next byte in sendbuffer. */
             usMasterSndBufferCount--;
         }
         else
         {
-            xFrameIsBroadcast = ( ucMasterRTUSndBuf[MB_SEND_BUF_PDU_OFF - MB_SER_PDU_PDU_OFF]
-                                                        == MB_ADDRESS_BROADCAST ) ? TRUE : FALSE;
-            vMBMasterRequestSetType( xFrameIsBroadcast );
+            xFrameIsBroadcast = (ucMasterRTUSndBuf[MB_SEND_BUF_PDU_OFF - MB_SER_PDU_PDU_OFF] == MB_ADDRESS_BROADCAST) ? TRUE : FALSE;
+            vMBMasterRequestSetType(xFrameIsBroadcast);
             eSndState = STATE_M_TX_XFWR;
             /* If the frame is broadcast ,master will enable timer of convert delay,
              * else master will enable timer of respond timeout. */
-            if ( xFrameIsBroadcast == TRUE )
+            if (xFrameIsBroadcast == TRUE)
             {
-                vMBMasterPortTimersConvertDelayEnable( );
+                vMBMasterPortTimersConvertDelayEnable();
             }
             else
             {
-                vMBMasterPortTimersRespondTimeoutEnable( );
+                vMBMasterPortTimersRespondTimeoutEnable();
             }
         }
         break;
@@ -410,26 +407,27 @@ xMBMasterRTUTimerExpired(void)
          * If the frame is broadcast,The master will idle,and if the frame is not
          * broadcast. Notify the listener process error.*/
     case STATE_M_TX_XFWR:
-        if ( xMBMasterRequestIsBroadcast( ) == FALSE ) {
+        if (xMBMasterRequestIsBroadcast() == FALSE)
+        {
             vMBMasterSetErrorType(EV_ERROR_RESPOND_TIMEOUT);
             xNeedPoll = xMBMasterPortEventPost(EV_MASTER_ERROR_PROCESS);
         }
         break;
         /* Function called in an illegal state. */
     default:
-        assert( ( eSndState == STATE_M_TX_XMIT ) || ( eSndState == STATE_M_TX_IDLE ));
+        assert((eSndState == STATE_M_TX_XMIT) || (eSndState == STATE_M_TX_IDLE));
         break;
     }
     eSndState = STATE_M_TX_IDLE;
 
-    vMBMasterPortTimersDisable( );
+    vMBMasterPortTimersDisable();
     /* If timer mode is convert delay, the master event then turns EV_MASTER_EXECUTE status. */
-    if (xMBMasterGetCurTimerMode() == MB_TMODE_CONVERT_DELAY) {
+    if (xMBMasterGetCurTimerMode() == MB_TMODE_CONVERT_DELAY)
+    {
         xNeedPoll = xMBMasterPortEventPost(EV_MASTER_EXECUTE);
     }
 
     return xNeedPoll;
 }
-
 
 #endif

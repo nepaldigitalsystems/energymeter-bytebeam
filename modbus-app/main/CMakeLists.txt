@@ -15,4 +15,5 @@ idf_component_register(SRCS "main.c"
                         REQUIRES  esp-modbus modbus_common nvs_flash wifi_provisioning)
 
 
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
