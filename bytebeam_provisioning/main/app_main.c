@@ -37,18 +37,18 @@ static char *utils_read_file(char *filename)
     int file_length = ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    if(file_length <= 0)
+    if (file_length <= 0)
     {
         ESP_LOGE(TAG, "Fialed to get device config file size");
         return NULL;
     }
 
     // dynamically allocate a char array to store the file contents
-    char *buff = (char *) malloc(sizeof(char) * (file_length + 1));
+    char *buff = (char *)malloc(sizeof(char) * (file_length + 1));
 
-    if(buff == NULL)
+    if (buff == NULL)
     {
-        ESP_LOGE(TAG, "Fialed to allocate the memory for device config file");
+        ESP_LOGE(TAG, "Failed to allocate the memory for device config file");
         return NULL;
     }
 
@@ -71,28 +71,27 @@ static char *utils_read_file(char *filename)
 static int read_device_config_file(void)
 {
     esp_err_t ret_code = ESP_OK;
-    #ifdef CONFIG_JSON_DEV_TEST
+#ifdef CONFIG_JSON_DEV_TEST
     char *config_fname = "/spiffs/device_config_2.json";
-    #else
+#else
     char *config_fname = "/spiffs/device_config.json";
-    #endif
+#endif
 
     esp_vfs_spiffs_conf_t conf = {
         .base_path = "/spiffs",
         .partition_label = NULL,
         .max_files = 5,
-        .format_if_mount_failed = true
-    };
+        .format_if_mount_failed = true};
 
     ret_code = esp_vfs_spiffs_register(&conf);
 
-    if(ret_code != ESP_OK)
+    if (ret_code != ESP_OK)
     {
-        if(ret_code == ESP_FAIL)
+        if (ret_code == ESP_FAIL)
         {
             ESP_LOGE(TAG, "Failed to mount or format filesystem");
         }
-        else if(ret_code == ESP_ERR_NOT_FOUND)
+        else if (ret_code == ESP_ERR_NOT_FOUND)
         {
             ESP_LOGE(TAG, "Failed to find SPIFFS partition");
         }
@@ -106,7 +105,7 @@ static int read_device_config_file(void)
 
     char *device_config_data = utils_read_file(config_fname);
 
-    if(device_config_data == NULL)
+    if (device_config_data == NULL)
     {
         ESP_LOGE(TAG, "Error in fetching Config data from FLASH");
 
@@ -124,7 +123,7 @@ static int read_device_config_file(void)
 
     ret_code = esp_vfs_spiffs_unregister(conf.partition_label);
 
-    if(ret_code != ESP_OK)
+    if (ret_code != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to unregister SPIFFS partition");
         return BYTEBEAM_PROVISIONING_FAILURE;
@@ -142,7 +141,7 @@ static int read_device_config_file(void)
 
 void app_main()
 {
-    if(read_device_config_file() == BYTEBEAM_PROVISIONING_SUCCESS)
+    if (read_device_config_file() == BYTEBEAM_PROVISIONING_SUCCESS)
     {
         ESP_LOGI(TAG, "Device Provisioning Success.");
     }

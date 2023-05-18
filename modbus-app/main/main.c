@@ -70,6 +70,9 @@
 #define CONFIG_EXAMPLE_RESET_PROV_MGR_ON_FAILURE 1
 #endif
 
+// #define EXAMPLE_ESP_WIFI_SSID "Xiaomi_284E"
+// #define EXAMPLE_ESP_WIFI_PASS "bajraauto"
+
 #define EXAMPLE_ESP_WIFI_SSID "nepaldigisys"
 #define EXAMPLE_ESP_WIFI_PASS "NDS_0ffice"
 
@@ -81,6 +84,8 @@
 
 /* Signal Wi-Fi events on this event-group */
 static EventGroupHandle_t wifi_event_group;
+/* Handle for Modbus task*/
+static TaskHandle_t xModbus_handle = NULL;
 
 #define CONFIG_EXAMPLE_PROV_MGR_MAX_RETRY_CNT 10
 #define WIFI_CONNECTED_BIT BIT0
@@ -120,20 +125,25 @@ static EventGroupHandle_t wifi_event_group;
 // #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (10)
+#define POLL_TIMEOUT_MS (100)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 #define STR(fieldname) ((const char *)(fieldname))
 
-// this macro is used to specify the delay for 1 sec.
-#define APP_DELAY_ONE_SEC 4500u
-static int config_publish_period = APP_DELAY_ONE_SEC;
+// this macro is used to specify the delay uSec.
+#define APP_PUBLISH_DELAY 5990u
+static int config_publish_period = APP_PUBLISH_DELAY;
 
 // Options can be used as bit masks or parameter limits
 #define OPTS(min_val, max_val, step_val)                   \
     {                                                      \
         .opt1 = min_val, .opt2 = max_val, .opt3 = step_val \
     }
+
+// this macro is used to specify the firmware version
+#define APP_FIRMWARE_VERSION "1.0.0"
+
+static const char *fw_version = APP_FIRMWARE_VERSION;
 
 // static char energymeter_stream[] = "energymeter_stream";
 static char energymeter_stream[] = "nds_test_modbus";
@@ -143,6 +153,9 @@ static bytebeam_client_t bytebeam_client;
 static const char *TAG = "ENRG_BYTEBEAM";
 
 static int s_retry_num = 0;
+
+static bool OTA_updating = false;
+static int32_t OTA_Action_ID = 0;
 
 // Enumeration of all supported CIDs for device (used in parameter definition table)
 enum
@@ -359,6 +372,43 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
     return ESP_OK;
 }
 
+void get_OTA_values(bool *status, int32_t *action_ID)
+{
+    // store the current OTA_updating_state flag in nvs
+    nvs_handle_t nvs_ota_handle;
+    int32_t update_flag = 0;
+    int32_t action_id_val = 0;
+    if (ESP_OK == nvs_open("test_storage", NVS_READWRITE, &nvs_ota_handle))
+    {
+        // first get the OTA_status
+        switch (nvs_get_i32(nvs_ota_handle, "update_flag", &update_flag)) // key 1: update_flag
+        {
+        case ESP_OK:
+            (*status) = (bool)((update_flag > 0) ? (1) : (0));
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            (*status) = (bool)false;
+            // ESP_LOGE(TAG, "Failed to get the OTA update flag in NVS ");
+            break;
+        }
+
+        // then get the OTA_action_ID
+        switch (nvs_get_i32(nvs_ota_handle, "action_id_val", &action_id_val)) // key 1: action_id_val
+        {
+        case ESP_OK:
+            (*action_ID) = (action_id_val);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            (*action_ID) = 0;
+            // ESP_LOGE(TAG, "Failed to get the action_id_val in NVS");
+            break;
+        }
+        nvs_close(nvs_ota_handle);
+        ESP_LOGW(TAG, "Got [update_flag] in NVS . OTA_update_needed? --> %s", (update_flag > 0) ? ("YES") : ("NO"));
+        ESP_LOGW(TAG, "Got [action_id_val] in NVS . Action_ID? --> %d", (action_id_val));
+    }
+}
+
 // static esp_err_t mb_master_read(uint8_t cid, float * d)
 // {
 //     const mb_parameter_descriptor_t* param_descriptor = NULL;
@@ -396,90 +446,111 @@ static void mb_master_operation(void *arg)
     uint8_t type = 0;
     while (1)
     {
-        static uint16_t cid = 0;
-        float data_val = 0.0;
-        // Get data from parameters description table
-        // and use this information to fill the characteristics description table
-        // and having all required fields in just one table
-        if (cid >= CID_COUNT) // 0-10
+        // check for the OTA initiation using NVS
+        if (!OTA_updating)
         {
-            cid = 0;
+            get_OTA_values(&OTA_updating, &OTA_Action_ID); // stores the
+            if (OTA_updating)
+                vTaskSuspendAll();
         }
-        esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
-        if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL))
-        {
-            temp_data[0] = 0;
-            temp_data[1] = 0;
-            temp_data[2] = 0;
-            temp_data[3] = 0;
-            esp_err_t err_get_param = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key, (uint8_t *)temp_data, &type);
-            if (err_get_param == ESP_OK)
-            {
-                ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
-                         param_descriptor->cid,
-                         type,
-                         (char *)param_descriptor->param_key,
-                         (char *)param_descriptor->param_units,
-                         *(float *)temp_data);
 
-                data_val = *(float *)temp_data;
-                switch (param_descriptor->cid)
+        if (OTA_updating)
+        {
+            ESP_LOGW(TAG, "Putting the modbas task to sleep for 5sec");
+            // vTaskDelay(5000 / portTICK_PERIOD_MS);
+            ESP_LOGE(TAG, "OTA_activating.... Modbus Suspend......");
+            vTaskSuspend(xModbus_handle);
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Modbus Task.............");
+            // if -> OTA_updating = false
+            static uint16_t cid = 0;
+            float data_val = 0.0;
+            // Get data from parameters description table
+            // and use this information to fill the characteristics description table
+            // and having all required fields in just one table
+            if (cid >= CID_COUNT) // 0-10
+            {
+                cid = 0;
+            }
+            esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
+            if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL))
+            {
+                // clearing the data_storage buffer
+                temp_data[0] = 0;
+                temp_data[1] = 0;
+                temp_data[2] = 0;
+                temp_data[3] = 0;
+                esp_err_t err_get_param = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key, (uint8_t *)temp_data, &type);
+                if (err_get_param == ESP_OK)
                 {
-                case CID_MFM384_INP_DATA_V_1:
-                    energyvals.voltage_1 = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_V_2:
-                    energyvals.voltage_2 = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_V_3:
-                    energyvals.voltage_3 = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_I1:
-                    energyvals.current_1 = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_I2:
-                    energyvals.current_2 = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_I3:
-                    energyvals.current_3 = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_AVG_I:
-                    energyvals.current_avg = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_KW:
-                    energyvals.total_kw = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_PF_AVG:
-                    energyvals.avg_pf = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_FREQUENCY:
-                    energyvals.frequencey = data_val;
-                    break;
-                case CID_MFM384_INP_DATA_KWH:
-                    energyvals.total_kwh = data_val;
-                    break;
-                default:
-                    break;
+                    ESP_LOGI(TAG, "Characteristic #%d Type : %d %s (%s) value = (%f) read successful.",
+                             param_descriptor->cid,
+                             type,
+                             (char *)param_descriptor->param_key,
+                             (char *)param_descriptor->param_units,
+                             *(float *)temp_data);
+
+                    data_val = *(float *)temp_data;
+                    switch (param_descriptor->cid)
+                    {
+                    case CID_MFM384_INP_DATA_V_1:
+                        energyvals.voltage_1 = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_V_2:
+                        energyvals.voltage_2 = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_V_3:
+                        energyvals.voltage_3 = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_I1:
+                        energyvals.current_1 = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_I2:
+                        energyvals.current_2 = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_I3:
+                        energyvals.current_3 = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_AVG_I:
+                        energyvals.current_avg = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_KW:
+                        energyvals.total_kw = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_PF_AVG:
+                        energyvals.avg_pf = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_FREQUENCY:
+                        energyvals.frequencey = data_val;
+                        break;
+                    case CID_MFM384_INP_DATA_KWH:
+                        energyvals.total_kwh = data_val;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(TAG, "Characteristic #%d Type : %d (Key: %s) read fail, err = 0x%x (%s). Register_start = (%d) value = (%f) ",
+                             param_descriptor->cid,
+                             type,
+                             (char *)param_descriptor->param_key,
+                             (int)err_get_param,
+                             (char *)esp_err_to_name(err_get_param),
+                             param_descriptor->mb_reg_start,
+                             *(float *)temp_data);
                 }
             }
             else
             {
-                ESP_LOGE(TAG, "Characteristic #%d Type : %d (Key: %s) read fail, err = 0x%x (%s). Register_start = (%d) value = (%f) ",
-                         param_descriptor->cid,
-                         type,
-                         (char *)param_descriptor->param_key,
-                         (int)err_get_param,
-                         (char *)esp_err_to_name(err_get_param),
-                         param_descriptor->mb_reg_start,
-                         *(float *)temp_data);
+                ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
             }
+            cid++;
+            vTaskDelay(POLL_TIMEOUT_TICS); // ticks -> 100ms
         }
-        else
-        {
-            ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
-        }
-        cid++;
-        vTaskDelay(POLL_TIMEOUT_TICS);
     }
     vTaskDelete(NULL);
 }
@@ -821,17 +892,41 @@ static int publish_energymeter_values(bytebeam_client_t *bytebeam_client)
 
 static void app_start(bytebeam_client_t *bytebeam_client)
 {
+    uint8_t tries = 0;
     int ret_val = 0;
-    while (1)
+    for (;;)
     {
-        // publish sht values
-        ret_val = publish_energymeter_values(bytebeam_client);
-        if (ret_val != 0)
-        {
-            ESP_LOGE(TAG, "Failed to publish energymeter values.");
-        }
+        // get NVS : OTA_update status
 
-        vTaskDelay(config_publish_period / portTICK_PERIOD_MS); // 1 sec
+        // check status
+        // if fixed time has passed activate the OTA_update task
+        if (!OTA_updating)
+        {
+            get_OTA_values(&OTA_updating, &OTA_Action_ID); // stores the
+        }
+        // publish values
+        if (!OTA_updating)
+        {
+            tries = 0;
+            ret_val = publish_energymeter_values(bytebeam_client);
+            if (ret_val != 0)
+            {
+                ESP_LOGE(TAG, "Failed to publish energymeter values.");
+            }
+            // if (bytebeam_client->connection_status == 1)
+            // {
+            //     ESP_LOGI(TAG, "Status : Connected");
+            //     ESP_LOGI(TAG, "Project Id : %s, Device Id : %s", bytebeam_client->device_cfg.project_id, bytebeam_client->device_cfg.device_id);
+            // }
+            // ESP_LOGI(TAG, "Application Firmware Version : %s", fw_version);
+        }
+        else
+        {
+            ++tries;
+            (tries >= 255) ? (tries = 0) : tries;
+            ESP_LOGE(TAG, "Stoped all services. OTA steps....[%d]", tries);
+        }
+        vTaskDelay(config_publish_period / portTICK_PERIOD_MS);
     }
 }
 
@@ -1048,16 +1143,33 @@ void app_main(void)
     // sync time from the ntp
     sync_time_from_ntp();
 
+    // check for OTA_status from NVS
+    // extract the OTA values into global variables
+    if (!OTA_updating)
+    {
+        get_OTA_values(&OTA_updating, &OTA_Action_ID);
+    }
     // initialize the bytebeam client
-    bytebeam_init(&bytebeam_client);
+    bytebeam_init(&bytebeam_client); // NOTE: THIS initialization also checks the NVS_OTA_status [turns the values to --> false]
+
+    // adding the OTA update action to take place
+    bytebeam_add_action_handler(&bytebeam_client, handle_ota, "update_firmware");
 
     // start the bytebeam client
     bytebeam_start(&bytebeam_client);
 
-    xTaskCreate(mb_master_operation, "Modbus Master", 5 * 2048, NULL, 5, NULL);
-
+    // check for OTA_status
+    if (OTA_updating)
+    {
+        ESP_LOGE(TAG, "waiting for 10sec ....  as OTA guard... (esp_restart has occoured)... bytebeam init");
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
+    }
+    else
+    { // start the modbus operation after 10 sec delay
+        xTaskCreate(mb_master_operation, "Modbus Master", 5 * 2048, NULL, 0, &xModbus_handle);
+    }
     //
-    // start the main application
+    // start the publish application
     //
     app_start(&bytebeam_client);
 #endif
