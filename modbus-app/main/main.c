@@ -50,7 +50,6 @@
 
 #include "modbus_params.h" // for modbus parameters structures
 #include "mbcontroller.h"
-// #include "mb_sdkconfig.h"
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
@@ -63,7 +62,6 @@
 #include "bytebeam_sdk.h"
 
 // #define PROVISION_EN
-
 
 #ifdef PROVISION_EN
     #define PROV_TRANSPORT_SOFTAP 1
@@ -123,7 +121,7 @@ static EventGroupHandle_t wifi_event_group;
 #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_RATE_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (10)
+#define POLL_TIMEOUT_MS (100)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_RATE_MS)
 
 
@@ -136,12 +134,12 @@ static EventGroupHandle_t wifi_event_group;
     }
 
 // this macro is used to specify the delay for 1 sec.
-#define APP_DELAY_ONE_SEC 1000u
+#define APP_DELAY_ONE_SEC 60000u
 
 static int config_publish_period = APP_DELAY_ONE_SEC;
 
 // static char energymeter_stream[] = "energymeter_stream";
-static char energymeter_stream[] = "nds_test_modbus";
+    static char energymeter_stream[] = "nds_test_modbus";
 
 static bytebeam_client_t bytebeam_client;
 
@@ -464,14 +462,14 @@ static void mb_master_operation(void *arg) {
                                 (char*)param_descriptor->param_key,
                                 (int)err_get_param,
                                 (char*)esp_err_to_name(err_get_param));
-                                continue;
+                                // continue;
             }
         } else {
             ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
         }  
 
         cid++;
-        vTaskDelay(POLL_TIMEOUT_MS);      
+        vTaskDelay(POLL_TIMEOUT_TICS);      
     } 
 }
 
