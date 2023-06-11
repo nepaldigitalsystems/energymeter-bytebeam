@@ -127,6 +127,7 @@ static void vUartTask(void *pvParameters)
     uart_event_t xEvent;
     USHORT usResult = 0;
     for(;;) {
+        uart_flush_input(2);
         if (xMBPortSerialWaitEvent(xMbUartQueue, (void*)&xEvent, portMAX_DELAY)) {
             ESP_LOGD(TAG, "MB_uart[%d] event:", ucUartNumber);
             switch(xEvent.type) {
@@ -170,6 +171,7 @@ static void vUartTask(void *pvParameters)
                     ESP_LOGD(TAG, "uart event type: %d\n", xEvent.type);
                     break;
             }
+       
         }
     }
     vTaskDelete(NULL);

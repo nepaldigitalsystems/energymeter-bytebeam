@@ -134,7 +134,7 @@ static EventGroupHandle_t wifi_event_group;
     }
 
 // this macro is used to specify the delay for 1 sec.
-#define APP_DELAY_ONE_SEC 60000u
+#define APP_DELAY_ONE_SEC 10000u
 
 static int config_publish_period = APP_DELAY_ONE_SEC;
 
@@ -387,26 +387,56 @@ esp_err_t custom_prov_data_handler(uint32_t session_id, const uint8_t *inbuf, ss
 
 //     return err;
 // }
+void task_info(void)
+{
 
+    TaskStatus_t *taskArray;
+    UBaseType_t taskCount;
+    const UBaseType_t maxTasks = 10;  // Maximum number of tasks to track
+    taskCount = uxTaskGetNumberOfTasks();
+    taskArray = malloc(taskCount * sizeof(TaskStatus_t));
+    //This function requires configUSE_TRACE_FACILITY=1. 
+    taskCount = uxTaskGetSystemState(taskArray, taskCount, NULL);
+
+    for (int i = 0; i < taskCount; i++) {
+    printf("Task Name: %s\n", taskArray[i].pcTaskName);
+    printf("Task State: %d\n", taskArray[i].eCurrentState);
+    printf("Task Priority: %d\n", taskArray[i].uxCurrentPriority);
+    printf("Task Stack High Water Mark: %d\n", taskArray[i].usStackHighWaterMark);
+    printf("===============================\n");
+}
+
+
+}
+
+//*******Main Task fro the modbus*********//
 static void mb_master_operation(void *arg) {
 
 
     const mb_parameter_descriptor_t* param_descriptor = NULL;    
     uint8_t temp_data[4] = {0}; // temporary buffer to hold maximum CID size
     uint8_t type = 0;
+    uint8_t err_flag = 0;
 
-    while(1) {        
+    while(1) {       
+        //task_info(); 
         static uint8_t cid = 0;
 
         float data_val = 0.0;
 
         if(cid >= CID_COUNT)   cid = 0;
 
-        esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
+            esp_err_t err = mbc_master_get_cid_info(cid, &param_descriptor);
+            
 
-        if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
+        if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL) && (err == ESP_OK) && (cid == param_descriptor->cid)) {
+            uart_flush(MB_PORT_NUM);
+            uart_flush_input(MB_PORT_NUM);
+            vTaskDelay(pdMS_TO_TICKS(1));
 
             esp_err_t err_get_param = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key, (uint8_t*)temp_data, &type);
+            uart_flush(MB_PORT_NUM);
+            uart_flush_input(MB_PORT_NUM);
 
 
             if (err_get_param == ESP_OK) {
@@ -417,9 +447,21 @@ static void mb_master_operation(void *arg) {
                                     (char*)param_descriptor->param_units,                                        
                                     *(float*)temp_data);
 
-                                    data_val = *(float*)temp_data;    
+                                    data_val = *(float*)temp_data;
+                                    // uint8_t cid_param = param_descriptor->cid ;
+                                    // if(err_flag)    
+                                    // {
+                                    //     if(cid_param - 1 < 0)
+                                    //     {
+                                    //         cid_param = CID_MFM384_INP_DATA_KWH;
+                                    //     }
+                                    //     else
+                                    //     {
+                                    //         cid_param = cid_param-1;
+                                    //     }
+                                    // }
 
-                                    switch (param_descriptor->cid)
+                                    switch (param_descriptor->cid)//switch (cid_param)
                                     {
                                     case CID_MFM384_INP_DATA_V_1:  
                                         energyvals.voltage_1 = data_val;        
@@ -463,12 +505,21 @@ static void mb_master_operation(void *arg) {
                                 (int)err_get_param,
                                 (char*)esp_err_to_name(err_get_param));
                                 // continue;
+                // Flush the uart
+                uart_flush(MB_PORT_NUM);
+                uart_flush_input(MB_PORT_NUM);
+                //err_flag = 1;
             }
         } else {
             ESP_LOGE(TAG, "Could not get information for characteristic %d.", cid);
         }  
 
         cid++;
+        param_descriptor = NULL;
+        temp_data[0] = 0;
+        temp_data[1] = 0;
+        temp_data[2] = 0;
+        temp_data[3] = 0;
         vTaskDelay(POLL_TIMEOUT_TICS);      
     } 
 }
@@ -882,9 +933,9 @@ static void sync_time_from_ntp(void)
     time(&now);
     localtime_r(&now, &timeinfo);
 }
-
 void app_main(void)
-{
+{   
+
     // Initialization of device peripheral and objects
     ESP_LOGI(TAG, "[APP] Startup..");
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
@@ -1060,7 +1111,7 @@ void app_main(void)
     // initialize the bytebeam client
     bytebeam_init(&bytebeam_client);
 
-    xTaskCreate(mb_master_operation, "Modbus Master", 5 * 2048, NULL, tskIDLE_PRIORITY, NULL);
+    xTaskCreate(mb_master_operation, "Modbus Master", 5 * 2048, NULL, 5, NULL); //tskIDLE_PRIORITY
 
     // start the bytebeam client
     bytebeam_start(&bytebeam_client);

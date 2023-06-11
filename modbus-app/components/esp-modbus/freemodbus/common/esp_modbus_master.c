@@ -70,6 +70,12 @@ esp_err_t mbc_master_get_parameter(uint16_t cid, char* name, uint8_t* value, uin
                     ESP_ERR_INVALID_STATE,
                     "Master interface is not correctly initialized.");
     error = master_interface_ptr->get_parameter(cid, name, value, type);
+    if(error != ESP_OK)
+    {   
+        //printf("error occured \n");
+        uart_flush(2);
+        uart_flush_input(2);
+    }
     MB_MASTER_CHECK((error == ESP_OK),
                     error,
                     "Master get parameter failure, error=(0x%x) (%s).",

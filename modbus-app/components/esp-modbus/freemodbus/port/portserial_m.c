@@ -41,7 +41,8 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
-#include "sdkconfig.h"
+// #include "sdkconfig.h"
+#include "E:/Nepal-Digi-sys-Intern/Projects/ESP32-Energy-meter/energymeter-bytebeam/modbus-app/build/config/sdkconfig.h"
 
 /* ----------------------- Modbus includes ----------------------------------*/
 #include "port.h"
@@ -146,7 +147,7 @@ void vMBMasterPortSerialEnable(BOOL bRxEnable, BOOL bTxEnable)
 }
 
 static USHORT usMBMasterPortSerialRxPoll(size_t xEventSize)
-{
+{   //Returns the processed byte
     BOOL xStatus = TRUE;
     USHORT usCnt = 0;
 
@@ -158,9 +159,10 @@ static USHORT usMBMasterPortSerialRxPoll(size_t xEventSize)
         }
         // The buffer is transferred into Modbus stack and is not needed here any more
         uart_flush_input(ucUartNumber);
-        ESP_LOGD(TAG, "Received data: %d(bytes in buffer)\n", (uint32_t)usCnt);
+        ESP_LOGI(TAG, "Received data: %d(bytes in buffer)\n", (uint32_t)usCnt);
 #if !CONFIG_FMB_TIMER_PORT_ENABLED
         vMBMasterSetCurTimerMode(MB_TMODE_T35);
+        printf(" here it comes .....\n");
         xStatus = pxMBMasterPortCBTimerExpired();
         if (!xStatus) {
             xMBMasterPortEventPost(EV_MASTER_FRAME_RECEIVED);
@@ -170,6 +172,7 @@ static USHORT usMBMasterPortSerialRxPoll(size_t xEventSize)
     } else {
         ESP_LOGE(TAG, "%s: bRxState disabled but junk data (%d bytes) received. ", __func__, xEventSize);
     }
+    
     return usCnt;
 }
 
@@ -193,33 +196,51 @@ BOOL xMBMasterPortSerialTxPoll(void)
     }
     return FALSE;
 }
-
 // UART receive event task
 static void vUartTask(void* pvParameters)
 {
     uart_event_t xEvent;
     USHORT usResult = 0;
     for(;;) {
+        
+
         if (xMBPortSerialWaitEvent(xMbUartQueue, (void*)&xEvent, portMAX_DELAY)) {
             ESP_LOGD(TAG, "MB_uart[%d] event:", ucUartNumber);
+                   
+
             switch(xEvent.type) {
+                //Received data:
+                //
+
                 //Event of UART receiving data
                 case UART_DATA:
-                    ESP_LOGD(TAG,"Data event, len: %d.", xEvent.size);
+                
+                        ESP_LOGI(TAG,"Data event, len: %d.", xEvent.size);
                     // This flag set in the event means that no more
                     // data received during configured timeout and UART TOUT feature is triggered
                     if (xEvent.timeout_flag) {
                         // Response is received but previous packet processing is pending
                         // Do not wait completion of processing and just discard received data as incorrect
                         if (vMBMasterRxSemaIsBusy()) {
+
                             vMBMasterRxFlush();
                             break;
                         }
+                        //uart_flush(2);
                         // Get buffered data length
+                        size_t temp = xEvent.size;
+
                         ESP_ERROR_CHECK(uart_get_buffered_data_len(ucUartNumber, &xEvent.size));
                         // Read received data and send it to modbus stack
+                        printf("The size after check %d\n",xEvent.size );
+                        if(temp != xEvent.size)
+                        {
+                            printf(" the zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\n");
+                        }
                         usResult = usMBMasterPortSerialRxPoll(xEvent.size);
-                        ESP_LOGD(TAG,"Timeout occured, processed: %d bytes", usResult);
+                        ESP_LOGI(TAG,"Timeout occured, processed: %d bytes", usResult); //ESP_LOGD
+                        xQueueReset(xMbUartQueue);
+                        uart_flush_input(2);
                     }
                     break;
                 //Event of HW FIFO overflow detected
@@ -253,6 +274,10 @@ static void vUartTask(void* pvParameters)
                     ESP_LOGD(TAG, "uart event type: %d.", xEvent.type);
                     break;
             }
+            //printf("*****************************************\n");
+             uart_flush(2);
+             xQueueReset(xMbUartQueue);
+             vTaskDelay(pdMS_TO_TICKS(5));
         }
     }
     vTaskDelete(NULL);

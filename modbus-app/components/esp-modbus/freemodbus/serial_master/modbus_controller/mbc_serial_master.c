@@ -254,6 +254,7 @@ static esp_err_t mbc_serial_master_send_request(mb_param_request_t* request, voi
 
         case MB_MRE_TIMEDOUT:
             error = ESP_ERR_TIMEOUT; // Slave did not send response
+            //printf("The slave didn't respond \n");
             break;
 
         case MB_MRE_EXE_FUN:
@@ -263,6 +264,7 @@ static esp_err_t mbc_serial_master_send_request(mb_param_request_t* request, voi
 
         case MB_MRE_MASTER_BUSY:
             error = ESP_ERR_INVALID_STATE; // Master is busy (previous request is pending)
+            //printf("The bmaster is busy \n");
             break;
 
         default:
@@ -382,6 +384,7 @@ static esp_err_t mbc_serial_master_set_request(char* name, mb_param_mode_t mode,
 }
 
 // Get parameter data for corresponding characteristic
+
 static esp_err_t mbc_serial_master_get_parameter(uint16_t cid, char* name,
                                                     uint8_t* value_ptr, uint8_t *type)
 {
@@ -397,12 +400,15 @@ static esp_err_t mbc_serial_master_get_parameter(uint16_t cid, char* name,
     if ((error == ESP_OK) && (cid == reg_info.cid)) {
         // Send request to read characteristic data
         error = mbc_serial_master_send_request(&request, value_ptr);
+        //printf("Inside the MB master %s\n",pcTaskGetTaskName(NULL));
         if (error == ESP_OK) {
             ESP_LOGD(TAG, "%s: Good response for get cid(%u) = %s",
                                     __FUNCTION__, (int)reg_info.cid, (char*)esp_err_to_name(error));
         } else {
-            ESP_LOGD(TAG, "%s: Bad response to get cid(%u) = %s",
+            ESP_LOGE(TAG, "%s: Bad response to get cid(%u) = %s",
                                             __FUNCTION__, reg_info.cid, (char*)esp_err_to_name(error));
+            
+            uart_flush(2);
         }
         // Set the type of parameter found in the table
         *type = reg_info.param_type;
@@ -410,6 +416,7 @@ static esp_err_t mbc_serial_master_get_parameter(uint16_t cid, char* name,
         ESP_LOGE(TAG, "%s: The cid(%u) not found in the data dictionary.",
                                                     __FUNCTION__, reg_info.cid);
         error = ESP_ERR_INVALID_ARG;
+
     }
     return error;
 }

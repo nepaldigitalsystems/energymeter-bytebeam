@@ -160,6 +160,8 @@ eMBMasterRTUStop( void )
 eMBErrorCode
 eMBMasterRTUReceive( UCHAR * pucRcvAddress, UCHAR ** pucFrame, USHORT * pusLength )
 {
+    //alias of peMBMasterFrameReceiveCur
+    // Called by the master Poll to check if the received event for the frame received contains the valid packet or not
     eMBErrorCode    eStatus = MB_ENOERR;
     UCHAR          *pucMBRTUFrame = ( UCHAR* ) ucMasterRTURcvBuf;
     USHORT          usFrameLength = usMasterRcvBufferPos;
@@ -196,6 +198,7 @@ eMBMasterRTUReceive( UCHAR * pucRcvAddress, UCHAR ** pucFrame, USHORT * pusLengt
     }
 
     EXIT_CRITICAL_SECTION(  );
+    uart_flush(2);
     return eStatus;
 }
 
@@ -292,6 +295,7 @@ xMBMasterRTUReceiveFSM( void )
             eRcvState = STATE_M_RX_RCV;
         }
 
+
         /* Enable t3.5 timers. */
 #if CONFIG_FMB_TIMER_PORT_ENABLED
         vMBMasterPortTimersT35Enable( );
@@ -313,6 +317,7 @@ xMBMasterRTUReceiveFSM( void )
         else
         {
             eRcvState = STATE_M_RX_ERROR;
+            printf(" the error occured in reading the bytes \n");
         }
 #if CONFIG_FMB_TIMER_PORT_ENABLED
         vMBMasterPortTimersT35Enable( );
@@ -386,8 +391,9 @@ xMBMasterRTUTimerExpired(void)
         break;
 
         /* A frame was received and t35 expired. Notify the listener that
-         * a new frame was received. */
+            * a new frame was received. */
     case STATE_M_RX_RCV:
+        //ESP_EARLY_LOGE("DBG", "RTU timer, Frame received.");
         xNeedPoll = xMBMasterPortEventPost(EV_MASTER_FRAME_RECEIVED);
         break;
 
